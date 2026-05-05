@@ -32,7 +32,11 @@ def _classify_intent(
     extracted: dict = {}
 
     # Order matters: more specific patterns first
-    if has_travel_plan and any(kw in msg for kw in ["调整", "修改", "太赶", "太累", "轻松", "重新规划", "预算不足"]):
+    if has_travel_plan and any(kw in msg for kw in [
+        "调整", "修改", "太赶", "太累", "轻松", "重新规划", "预算不足",
+        "换", "换成", "换个", "换一下", "别的", "其他", "不要", "不想去",
+        "玩过", "去过", "打卡过", "已经去", "已经玩", "避开", "跳过",
+    ]):
         return "travel_adjust", extracted
 
     if any(kw in msg for kw in ["再买一次", "复购", "再来一单", "重新购买", "上次买"]):
