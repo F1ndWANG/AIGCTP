@@ -8,6 +8,7 @@ Uses LangGraph to orchestrate travel planning:
   4. Structured output
 """
 import json
+import re
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -334,7 +335,10 @@ async def adjust_plan(
         pois_task, restaurants_task, weather_task, fetch_products(),
     )
 
-    prompt = _build_adjustment_prompt(instruction, current_itinerary, pois, restaurants, weather, products)
+    excluded_pois = _infer_excluded_pois(instruction, current_itinerary)
+    replacement_pois = _exclude_pois(pois, excluded_pois)
+
+    prompt = _build_adjustment_prompt(instruction, current_itinerary, replacement_pois, restaurants, weather, products)
 
     try:
         itinerary = await asyncio.wait_for(
@@ -346,8 +350,11 @@ async def adjust_plan(
         )
     except Exception as e:
         logger.warning("adjust_plan JSON generation failed: %s", e)
-        itinerary = _fallback_itinerary(destination, days, pois)
+        itinerary = _fallback_itinerary(destination, days, replacement_pois)
         itinerary["theme"] = f"{destination}调整后行程"
+
+    if excluded_pois and _itinerary_contains_pois(itinerary, excluded_pois):
+        _replace_excluded_activities(itinerary, replacement_pois, excluded_pois)
 
     _merge_weather_into_itinerary(itinerary, weather)
 
@@ -391,6 +398,119 @@ async def _generate_summary(
         temperature=0.7,
     )
     return summary
+
+
+def _normalize_poi_name(name: str) -> str:
+    """Normalize POI names for lightweight matching."""
+    return re.sub(r"[\s\-·・—_()（）《》【】\[\]]+", "", name or "").lower()
+
+
+def _poi_aliases(name: str) -> set[str]:
+    normalized = _normalize_poi_name(name)
+    aliases = {normalized}
+    for suffix in ("博物院", "博物馆", "公园", "广场", "景区", "街区", "大街", "寺"):
+        if normalized.endswith(suffix):
+            aliases.add(normalized[: -len(suffix)])
+    return {alias for alias in aliases if alias}
+
+
+def _collect_activity_pois(itinerary: dict) -> list[str]:
+    pois: list[str] = []
+    for day in itinerary.get("day_by_day", []) or []:
+        for activity in day.get("activities", []) or []:
+            poi = activity.get("poi")
+            if isinstance(poi, str) and poi:
+                pois.append(poi)
+    return pois
+
+
+def _infer_excluded_pois(instruction: str, current_itinerary: dict) -> list[str]:
+    """Infer POIs the user wants to avoid from the adjustment instruction."""
+    current_pois = _collect_activity_pois(current_itinerary)
+    if not current_pois:
+        return []
+
+    normalized_instruction = _normalize_poi_name(instruction)
+    replace_all_markers = (
+        "这几个", "这些", "全部", "全都", "都玩过", "都去过",
+        "都打卡", "经典景点", "换别的", "换成别的",
+    )
+    if any(marker in instruction for marker in replace_all_markers):
+        return current_pois
+
+    excluded: list[str] = []
+    for poi in current_pois:
+        if any(alias and alias in normalized_instruction for alias in _poi_aliases(poi)):
+            excluded.append(poi)
+    return excluded
+
+
+def _exclude_pois(pois: list[dict], excluded_names: list[str]) -> list[dict]:
+    if not excluded_names:
+        return pois
+
+    excluded_aliases = set()
+    for name in excluded_names:
+        excluded_aliases.update(_poi_aliases(name))
+
+    filtered: list[dict] = []
+    for poi in pois:
+        name = str(poi.get("name", ""))
+        aliases = _poi_aliases(name)
+        if aliases.isdisjoint(excluded_aliases):
+            filtered.append(poi)
+    return filtered or pois
+
+
+def _matches_excluded_poi(name: str, excluded_names: list[str]) -> bool:
+    aliases = _poi_aliases(name)
+    for excluded in excluded_names:
+        excluded_aliases = _poi_aliases(excluded)
+        if not aliases.isdisjoint(excluded_aliases):
+            return True
+    return False
+
+
+def _itinerary_contains_pois(itinerary: dict, excluded_names: list[str]) -> bool:
+    return any(_matches_excluded_poi(poi, excluded_names) for poi in _collect_activity_pois(itinerary))
+
+
+def _replace_excluded_activities(
+    itinerary: dict,
+    replacement_pois: list[dict],
+    excluded_names: list[str],
+) -> None:
+    """Replace stale activities in-place when model output did not honor exclusions."""
+    candidates = [poi for poi in replacement_pois if not _matches_excluded_poi(str(poi.get("name", "")), excluded_names)]
+    if not candidates:
+        return
+
+    used = {_normalize_poi_name(poi) for poi in _collect_activity_pois(itinerary)}
+    candidate_index = 0
+
+    for day in itinerary.get("day_by_day", []) or []:
+        for activity in day.get("activities", []) or []:
+            current_name = str(activity.get("poi", ""))
+            if not _matches_excluded_poi(current_name, excluded_names):
+                continue
+
+            replacement = None
+            while candidate_index < len(candidates):
+                candidate = candidates[candidate_index]
+                candidate_index += 1
+                candidate_name = str(candidate.get("name", ""))
+                normalized = _normalize_poi_name(candidate_name)
+                if normalized and normalized not in used:
+                    replacement = candidate
+                    used.add(normalized)
+                    break
+
+            if not replacement:
+                return
+
+            replacement_name = str(replacement.get("name", current_name))
+            activity["poi"] = replacement_name
+            activity["description"] = f"参观{replacement_name}"
 
 
 def _fallback_itinerary(destination: str, days: int, pois: list[dict]) -> dict:
