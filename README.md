@@ -1,6 +1,10 @@
 # AIGCTP: AI-Driven Life Recommendation and Planning System
 
 <p align="center">
+  <img src="frontend/public/icon.svg" width="128" height="128" alt="AIGCTP project icon">
+</p>
+
+<p align="center">
   <a href="https://github.com/F1ndWANG/AIGCTP"><img src="https://img.shields.io/badge/repo-GitHub-black?logo=github" alt="GitHub Repo"></a>
   <img src="https://img.shields.io/badge/frontend-Next.js%2014-000000?logo=nextdotjs" alt="Next.js 14">
   <img src="https://img.shields.io/badge/backend-FastAPI-009688?logo=fastapi" alt="FastAPI">

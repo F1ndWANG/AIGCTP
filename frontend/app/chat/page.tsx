@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { Suspense, useState, useCallback, useRef, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/Layout/AuthProvider";
 import { useToast } from "@/components/UI/Toast";
@@ -14,7 +14,7 @@ function generateId(): string {
   try { return crypto.randomUUID(); } catch { return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`; }
 }
 
-export default function ChatPage() {
+function ChatPageContent() {
   const { user, loading, logout } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
@@ -362,5 +362,19 @@ export default function ChatPage() {
       {/* Input */}
       <ChatInput onSend={handleSend} disabled={sending} />
     </div>
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="animate-spin w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full" />
+        </div>
+      }
+    >
+      <ChatPageContent />
+    </Suspense>
   );
 }

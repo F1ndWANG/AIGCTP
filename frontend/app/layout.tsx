@@ -8,6 +8,10 @@ import { ErrorBoundary } from "@/components/UI/ErrorBoundary";
 export const metadata: Metadata = {
   title: "AI 生活推荐系统",
   description: "智能旅行规划 · 饮食健康 · AI 购物助手",
+  icons: {
+    icon: "/icon.svg",
+    apple: "/icon-192x192.png",
+  },
   other: {
     "manifest": "/manifest.json",
   },
