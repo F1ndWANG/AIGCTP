@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -194,6 +194,27 @@ async def get_diet_plan(
     plan = result.scalar_one_or_none()
     if not plan:
         raise HTTPException(status_code=404, detail="Diet plan not found")
+    return DietPlanResponse.model_validate(plan)
+
+
+@router.post("/plans/{plan_id}/confirm", response_model=DietPlanResponse)
+async def confirm_diet_plan(
+    plan_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(DietPlan).where(DietPlan.id == plan_id, DietPlan.user_id == current_user.id)
+    )
+    plan = result.scalar_one_or_none()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Diet plan not found")
+
+    plan.status = "active"
+    if not plan.activated_at:
+        plan.activated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    await db.commit()
+    await db.refresh(plan)
     return DietPlanResponse.model_validate(plan)
 
 

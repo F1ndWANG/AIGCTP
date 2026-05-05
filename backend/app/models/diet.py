@@ -57,6 +57,7 @@ class DietPlan(Base):
     total_nutrition = Column(JSON, nullable=True)
     tips = Column(JSON, default=list)
     status = Column(String(20), default="draft")  # draft / active / completed
+    activated_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 

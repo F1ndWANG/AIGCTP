@@ -67,6 +67,7 @@ class DietPlanResponse(BaseModel):
     total_nutrition: Optional[dict] = None
     tips: list[str]
     status: str
+    activated_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 
@@ -78,6 +79,7 @@ class DietPlanListItem(BaseModel):
     title: str
     duration_days: int
     status: str
+    activated_at: Optional[datetime] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

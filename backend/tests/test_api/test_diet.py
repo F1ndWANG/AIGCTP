@@ -65,3 +65,51 @@ class TestDietPlans:
     async def test_get_diet_plan_not_found(self, client, auth_headers):
         resp = await client.get("/api/v1/diet/plans/9999", headers=auth_headers)
         assert resp.status_code == 404
+
+    async def test_confirm_diet_plan(self, client, auth_headers, session, test_user):
+        from app.models.diet import DietPlan
+
+        plan = DietPlan(
+            user_id=test_user.id,
+            title="7天减脂饮食计划",
+            duration_days=7,
+            meals={"day_by_day": [{"day": 1, "meals": []}]},
+            tips=[],
+            status="draft",
+        )
+        session.add(plan)
+        await session.commit()
+        await session.refresh(plan)
+
+        resp = await client.post(f"/api/v1/diet/plans/{plan.id}/confirm", headers=auth_headers)
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "active"
+        assert data["activated_at"] is not None
+
+    async def test_confirm_diet_plan_not_found(self, client, auth_headers):
+        resp = await client.post("/api/v1/diet/plans/9999/confirm", headers=auth_headers)
+        assert resp.status_code == 404
+
+    async def test_delete_diet_plan_removes_from_list(self, client, auth_headers, session, test_user):
+        from app.models.diet import DietPlan
+
+        plan = DietPlan(
+            user_id=test_user.id,
+            title="可删除饮食计划",
+            duration_days=1,
+            meals={"day_by_day": [{"day": 1, "meals": []}]},
+            tips=[],
+            status="draft",
+        )
+        session.add(plan)
+        await session.commit()
+        await session.refresh(plan)
+
+        resp = await client.delete(f"/api/v1/diet/plans/{plan.id}", headers=auth_headers)
+        assert resp.status_code == 204
+
+        list_resp = await client.get("/api/v1/diet/plans", headers=auth_headers)
+        assert list_resp.status_code == 200
+        assert all(item["id"] != plan.id for item in list_resp.json())

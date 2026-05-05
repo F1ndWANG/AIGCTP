@@ -220,6 +220,7 @@ export interface DietPlan {
   };
   tips?: string[];
   status: string;
+  activated_at?: string;
   created_at: string;
 }
 
@@ -228,6 +229,7 @@ export interface DietPlanListItem {
   title: string;
   duration_days: number;
   status: string;
+  activated_at?: string;
   created_at: string;
 }
 

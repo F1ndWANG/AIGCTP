@@ -234,6 +234,10 @@ export const diet = {
     }),
   getPlans: () => request<DietPlanListItem[]>("/diet/plans"),
   getPlan: (id: number) => request<DietPlan>(`/diet/plans/${id}`),
+  confirmPlan: (id: number) =>
+    request<DietPlan>(`/diet/plans/${id}/confirm`, {
+      method: "POST",
+    }),
   deletePlan: (id: number) =>
     fetch(`${API_BASE}/diet/plans/${id}`, {
       method: "DELETE",
