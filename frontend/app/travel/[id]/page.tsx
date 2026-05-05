@@ -12,7 +12,9 @@ export default function TravelDetailPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const sessionId = searchParams.get("session") || undefined;
+  const [sessionId, setSessionId] = useState<string | undefined>(
+    () => searchParams.get("session") || undefined
+  );
   const { toast } = useToast();
   const { user, loading: authLoading } = useAuth();
   const [plan, setPlan] = useState<TravelPlanResponse | null>(null);
@@ -39,8 +41,11 @@ export default function TravelDetailPage() {
     setAdjusting(true);
     try {
       const result = await chatApi.send(adjustInput, sessionId, plan.id);
+      setSessionId(result.session_id);
       setAdjustInput("");
-      // Reload plan
+      if (result.travel_plan) {
+        setPlan(result.travel_plan);
+      }
       const updated = await travelApi.get(plan.id);
       setPlan(updated);
       toast("行程已更新！", "success");
@@ -74,13 +79,15 @@ export default function TravelDetailPage() {
 
   if (!plan) return null;
 
+  const backToChatHref = sessionId ? `/chat?session=${sessionId}` : "/chat";
+
   return (
     <main className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b px-4 py-3">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <button
-            onClick={() => router.push(sessionId ? `/chat?session=${sessionId}` : "/chat")}
+            onClick={() => router.push(backToChatHref)}
             className="text-sm text-blue-600 hover:underline"
           >
             ← 返回对话

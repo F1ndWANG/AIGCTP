@@ -7,7 +7,7 @@ import { useToast } from "@/components/UI/Toast";
 import MessageList from "@/components/Chat/MessageList";
 import ChatInput from "@/components/Chat/ChatInput";
 import TravelPlanCard from "@/components/TravelPlan/TravelPlanCard";
-import { chat as chatApi, commerce as commerceApi } from "@/lib/api";
+import { chat as chatApi, commerce as commerceApi, travel as travelApi } from "@/lib/api";
 import type { Message, TravelPlanResponse, TravelPlanListItem, ChatSession, ProductListItem } from "@/lib/types";
 
 function generateId(): string {
@@ -124,6 +124,32 @@ function ChatPageContent() {
       const detail = await chatApi.getSession(sid);
       setMessages(detail.messages);
       setSessionId(detail.session_id);
+      const planContext = (detail.context?.current_travel_plan || null) as {
+        id?: number;
+        destination?: string;
+        days?: number;
+        itinerary?: TravelPlanResponse["itinerary"];
+      } | null;
+      if (planContext?.id) {
+        try {
+          const fullPlan = await travelApi.get(Number(planContext.id));
+          setCurrentPlan(fullPlan);
+        } catch {
+          setCurrentPlan({
+            id: Number(planContext.id),
+            destination: planContext.destination || "",
+            days: planContext.days || 1,
+            itinerary: planContext.itinerary,
+            status: "draft",
+            created_at: "",
+            updated_at: "",
+            people_count: 1,
+            preferences: {},
+          });
+        }
+      } else {
+        setCurrentPlan(null);
+      }
       setShowChatHistory(false);
     } catch { toast("加载对话失败", "error"); }
   };
@@ -232,7 +258,8 @@ function ChatPageContent() {
                   <button
                     key={plan.id}
                     onClick={() => {
-                      router.push(`/travel/${plan.id}`);
+                      const sid = sessionIdRef.current;
+                      router.push(sid ? `/travel/${plan.id}?session=${sid}` : `/travel/${plan.id}`);
                       setShowHistory(false);
                     }}
                     className="text-left p-3 border rounded-lg hover:bg-gray-50 transition"

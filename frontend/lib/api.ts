@@ -49,7 +49,11 @@ async function request<T>(
   const t = getToken();
   if (t) headers["Authorization"] = `Bearer ${t}`;
 
-  const resp = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const resp = await fetch(`${API_BASE}${path}`, {
+    cache: "no-store",
+    ...options,
+    headers,
+  });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({ detail: resp.statusText }));
     throw new Error(err.detail || "Request failed");
