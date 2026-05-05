@@ -110,9 +110,14 @@ async def recommend_diet(
 
     response_text = result.get("response", "")
     diet_plan_data = result.get("diet_plan")
+    wants_plan = _wants_diet_plan(user_message)
+
+    if wants_plan and not _is_valid_diet_plan(diet_plan_data):
+        diet_plan_data = _fallback_diet_plan(user_message)
+        response_text = _format_diet_plan_response(diet_plan_data)
 
     # Save diet plan to DB if generated
-    if diet_plan_data and diet_plan_data.get("meals"):
+    if _is_valid_diet_plan(diet_plan_data):
         try:
             plan = DietPlan(
                 user_id=user_id,
@@ -133,6 +138,103 @@ async def recommend_diet(
         "response": response_text,
         "diet_plan": diet_plan_data,
     }
+
+
+def _wants_diet_plan(user_message: str) -> bool:
+    """Return True when the user explicitly asks for a structured diet plan."""
+    plan_markers = ("计划", "食谱", "菜单", "一周", "7天", "七天", "每日", "每天")
+    diet_markers = ("饮食", "减肥", "减脂", "增肌", "控糖", "健康餐", "营养")
+    return any(marker in user_message for marker in plan_markers) and any(
+        marker in user_message for marker in diet_markers
+    )
+
+
+def _infer_duration_days(user_message: str) -> int:
+    if any(marker in user_message for marker in ("一周", "7天", "七天")):
+        return 7
+    return 1
+
+
+def _infer_goal(user_message: str) -> str:
+    if "增肌" in user_message:
+        return "增肌"
+    if "控糖" in user_message:
+        return "控糖"
+    if "减肥" in user_message or "减脂" in user_message:
+        return "减脂"
+    return "健康饮食"
+
+
+def _is_valid_diet_plan(diet_plan_data: Any) -> bool:
+    return isinstance(diet_plan_data, dict) and bool(diet_plan_data.get("meals"))
+
+
+def _fallback_diet_plan(user_message: str) -> dict[str, Any]:
+    """Build a deterministic diet plan when the LLM does not return structured JSON."""
+    duration_days = _infer_duration_days(user_message)
+    goal = _infer_goal(user_message)
+
+    templates = [
+        {
+            "breakfast": [("燕麦粥", "1碗", 220), ("水煮蛋", "1个", 70), ("蓝莓", "1小把", 40)],
+            "lunch": [("糙米饭", "1小碗", 180), ("香煎鸡胸肉", "120g", 200), ("西兰花", "200g", 70)],
+            "dinner": [("清蒸鱼", "120g", 160), ("杂蔬沙拉", "1份", 90), ("红薯", "100g", 90)],
+        },
+        {
+            "breakfast": [("全麦面包", "2片", 180), ("低脂牛奶", "250ml", 120), ("苹果", "1个", 80)],
+            "lunch": [("藜麦饭", "1小碗", 170), ("虾仁炒蛋", "1份", 230), ("生菜", "200g", 40)],
+            "dinner": [("豆腐菌菇汤", "1碗", 150), ("凉拌黄瓜", "1份", 45), ("玉米", "半根", 80)],
+        },
+        {
+            "breakfast": [("无糖酸奶", "200g", 120), ("坚果", "10g", 60), ("香蕉", "半根", 45)],
+            "lunch": [("荞麦面", "1碗", 260), ("牛肉片", "100g", 190), ("菠菜", "200g", 50)],
+            "dinner": [("鸡蛋羹", "1份", 120), ("番茄炒蛋", "半份", 140), ("紫甘蓝沙拉", "1份", 60)],
+        },
+    ]
+
+    day_by_day = []
+    total_calories = 0
+    for day in range(1, duration_days + 1):
+        template = templates[(day - 1) % len(templates)]
+        meals = []
+        for meal_type, key in (("早餐", "breakfast"), ("午餐", "lunch"), ("晚餐", "dinner")):
+            foods = [
+                {"name": name, "amount": amount, "calories": calories}
+                for name, amount, calories in template[key]
+            ]
+            total_calories += sum(food["calories"] for food in foods)
+            meals.append({"meal_type": meal_type, "foods": foods})
+        day_by_day.append({"day": day, "meals": meals})
+
+    avg_calories = round(total_calories / duration_days)
+    return {
+        "title": f"{duration_days}天{goal}饮食计划",
+        "duration_days": duration_days,
+        "meals": {"day_by_day": day_by_day},
+        "total_nutrition": {
+            "calories": avg_calories,
+            "protein": 95 if goal in ("减脂", "增肌") else 75,
+            "carbs": 150 if goal == "减脂" else 190,
+            "fat": 45,
+        },
+        "tips": [
+            "每天保证足量饮水，优先选择蒸、煮、炖等低油烹饪方式。",
+            "如果运动量较大，可在训练后补充无糖酸奶、鸡蛋或低脂牛奶。",
+            "晚餐尽量提前到睡前3小时完成，减少高糖零食和含糖饮料。",
+        ],
+    }
+
+
+def _format_diet_plan_response(diet_plan_data: dict[str, Any]) -> str:
+    title = diet_plan_data.get("title", "饮食计划")
+    duration_days = diet_plan_data.get("duration_days", 1)
+    nutrition = diet_plan_data.get("total_nutrition") or {}
+    calories = nutrition.get("calories", 0)
+    return (
+        f"已为你生成《{title}》，共 {duration_days} 天，并已保存到“饮食健康”的饮食计划中。\n\n"
+        f"计划以高蛋白、控油、适量碳水和充足蔬菜为核心，日均热量约 {calories} kcal。"
+        "你可以进入“饮食健康 -> 饮食计划”查看完整每日三餐安排。"
+    )
 
 
 async def log_meal(
