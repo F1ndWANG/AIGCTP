@@ -1,0 +1,40 @@
+# ── Environment ──
+.env
+.env.local
+.env.production
+
+# ── Logs ──
+*.log
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.venv/
+.pytest_cache/
+
+# ── Node.js ──
+node_modules/
+.next/
+
+# ── Database ──
+*.db
+*.sqlite
+
+# ── IDE ──
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+
+# ── Docker ──
+.docker/
+
+# ── Build ──
+dist/
+build/
