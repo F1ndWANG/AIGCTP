@@ -336,10 +336,18 @@ async def adjust_plan(
 
     prompt = _build_adjustment_prompt(instruction, current_itinerary, pois, restaurants, weather, products)
 
-    itinerary = await llm_service.extract_json(
-        system_prompt=TRAVEL_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    try:
+        itinerary = await asyncio.wait_for(
+            llm_service.extract_json(
+                system_prompt=TRAVEL_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": prompt}],
+            ),
+            timeout=60,
+        )
+    except Exception as e:
+        logger.warning("adjust_plan JSON generation failed: %s", e)
+        itinerary = _fallback_itinerary(destination, days, pois)
+        itinerary["theme"] = f"{destination}调整后行程"
 
     _merge_weather_into_itinerary(itinerary, weather)
 

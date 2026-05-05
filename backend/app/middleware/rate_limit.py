@@ -19,15 +19,21 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         r = await get_redis()
         if r:
-            key = f"ratelimit:{client_id}"
-            count = await r.incr(key)
-            if count == 1:
-                await r.expire(key, 60)
+            try:
+                key = f"ratelimit:{client_id}"
+                count = await r.incr(key)
+                if count == 1:
+                    await r.expire(key, 60)
 
-            if count > settings.RATE_LIMIT_PER_MINUTE:
-                raise HTTPException(
-                    status_code=429,
-                    detail="请求过于频繁，请稍后再试",
-                )
+                if count > settings.RATE_LIMIT_PER_MINUTE:
+                    raise HTTPException(
+                        status_code=429,
+                        detail="Too many requests, please try again later",
+                    )
+            except HTTPException:
+                raise
+            except Exception:
+                # Redis is optional in local/dev mode; do not fail user requests.
+                pass
 
         return await call_next(request)
