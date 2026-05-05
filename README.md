@@ -1,7 +1,7 @@
 # AIGCTP: AI-Driven Life Recommendation and Planning System
 
 <p align="center">
-  <img src="frontend/public/icon.svg" width="128" height="128" alt="AIGCTP project icon">
+  <img src="frontend/public/brand-banner.svg" width="420" alt="AIGCTP project icon">
 </p>
 
 <p align="center">

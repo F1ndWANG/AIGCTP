@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 320" role="img" aria-labelledby="title desc">
+  <title id="title">AIGCTP Life Planet Banner</title>
+  <desc id="desc">A wide cute life planet banner for an AI assistant that connects travel, food, shopping, and recommendations.</desc>
+  <defs>
+    <linearGradient id="bannerBg" x1="80" y1="24" x2="880" y2="296" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#DCFCE7"/>
+      <stop offset="0.43" stop-color="#BAE6FD"/>
+      <stop offset="1" stop-color="#FED7AA"/>
+    </linearGradient>
+    <linearGradient id="planet" x1="360" y1="38" x2="600" y2="286" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFF7ED"/>
+      <stop offset="0.58" stop-color="#ECFDF5"/>
+      <stop offset="1" stop-color="#DBEAFE"/>
+    </linearGradient>
+    <linearGradient id="land" x1="340" y1="160" x2="620" y2="238" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#34D399"/>
+      <stop offset="1" stop-color="#22C55E"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-35%" width="140%" height="170%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#0F172A" flood-opacity="0.16"/>
+    </filter>
+  </defs>
+
+  <rect x="18" y="18" width="924" height="284" rx="76" fill="url(#bannerBg)"/>
+  <circle cx="118" cy="84" r="18" fill="#FFFFFF" opacity="0.75"/>
+  <circle cx="806" cy="76" r="26" fill="#FFFFFF" opacity="0.66"/>
+  <circle cx="844" cy="224" r="16" fill="#FFFFFF" opacity="0.68"/>
+  <path d="M94 232C166 273 274 278 360 232" fill="none" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round" opacity="0.5"/>
+  <path d="M604 84C696 51 801 75 868 144" fill="none" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round" opacity="0.45"/>
+
+  <g filter="url(#shadow)">
+    <circle cx="480" cy="166" r="116" fill="url(#planet)"/>
+    <path d="M379 180C402 150 438 141 474 158C510 175 538 178 581 151C598 169 607 193 610 216C579 249 536 268 485 267C437 266 399 237 379 180Z" fill="url(#land)" opacity="0.94"/>
+    <path d="M396 121C425 96 464 86 502 93C534 99 562 116 584 143" fill="none" stroke="#38BDF8" stroke-width="16" stroke-linecap="round" opacity="0.36"/>
+    <path d="M398 222C445 203 516 207 568 233" fill="none" stroke="#FBBF24" stroke-width="12" stroke-linecap="round" opacity="0.75"/>
+    <circle cx="480" cy="166" r="116" fill="none" stroke="#FFFFFF" stroke-width="12"/>
+  </g>
+
+  <g fill="none" stroke="#0F172A" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M442 132C433 141 433 155 442 164"/>
+    <path d="M518 132C527 141 527 155 518 164"/>
+    <path d="M457 141H457.5"/>
+    <path d="M503 141H503.5"/>
+    <path d="M459 183C472 196 489 196 501 183"/>
+    <path d="M480 115V96"/>
+    <path d="M465 96H495"/>
+  </g>
+  <circle cx="480" cy="96" r="11" fill="#FDE68A" stroke="#0F172A" stroke-width="7"/>
+
+  <g stroke="#0F172A" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <g transform="translate(206 91)">
+      <circle cx="42" cy="42" r="34" fill="#FFFFFF"/>
+      <path d="M42 17C26 35 26 50 42 74C58 50 58 35 42 17Z" fill="#FB7185"/>
+      <circle cx="42" cy="43" r="8" fill="#FFFFFF" stroke-width="5"/>
+    </g>
+    <g transform="translate(666 91)">
+      <circle cx="42" cy="42" r="34" fill="#FFFFFF"/>
+      <path d="M24 49H60" />
+      <path d="M31 29L29 50" />
+      <path d="M53 29L55 50" />
+      <path d="M29 29H55" />
+      <path d="M24 57C35 69 51 69 60 57" fill="none"/>
+    </g>
+    <g transform="translate(112 190)">
+      <circle cx="42" cy="42" r="34" fill="#FFFFFF"/>
+      <path d="M25 40H59L54 60H30L25 40Z" fill="#93C5FD"/>
+      <path d="M34 40C34 27 50 27 50 40" fill="none"/>
+    </g>
+    <g transform="translate(760 190)">
+      <circle cx="42" cy="42" r="34" fill="#FFFFFF"/>
+      <path d="M26 49C38 33 51 32 63 43" fill="none"/>
+      <path d="M26 49L39 60L63 43" fill="#FCD34D"/>
+      <circle cx="26" cy="49" r="5" fill="#34D399"/>
+      <circle cx="63" cy="43" r="5" fill="#FB7185"/>
+    </g>
+  </g>
+
+  <path d="M248 134C314 102 374 101 438 129" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round" stroke-dasharray="3 20" opacity="0.9"/>
+  <path d="M522 126C586 99 643 102 708 132" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round" stroke-dasharray="3 20" opacity="0.9"/>
+  <path d="M153 232C232 187 313 181 396 216" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round" stroke-dasharray="3 22" opacity="0.82"/>
+  <path d="M564 216C650 181 728 188 802 232" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round" stroke-dasharray="3 22" opacity="0.82"/>
+</svg>
