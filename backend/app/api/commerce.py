@@ -3,8 +3,9 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_
+from sqlalchemy import String, cast, select, func, or_
 from sqlalchemy.orm import selectinload
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.database import get_db
 from app.api.deps import get_current_user
@@ -83,7 +84,7 @@ async def list_products(
     if keyword:
         like = f"%{keyword}%"
         query = query.where(
-            or_(Product.name.ilike(like), Product.tags.ilike(like))
+            or_(Product.name.ilike(like), cast(Product.tags, String).ilike(like))
         )
     if min_price is not None:
         query = query.where(Product.price >= min_price)
@@ -92,7 +93,7 @@ async def list_products(
     if tags:
         tag_list = [t.strip() for t in tags.split(",") if t.strip()]
         for tag in tag_list:
-            query = query.where(Product.tags.as_string().ilike(f"%{tag}%"))
+            query = query.where(cast(Product.tags, String).ilike(f"%{tag}%"))
 
     count_query = select(func.count()).select_from(query.subquery())
     total = await db.scalar(count_query)
@@ -285,6 +286,13 @@ async def remove_cart_item(
     item = result.scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=404, detail="Cart item not found")
+
+    # Restore product stock
+    product = await db.get(Product, item.product_id)
+    if product:
+        product.stock += item.quantity
+        flag_modified(product, "stock")
+
     await db.delete(item)
     await db.commit()
 
@@ -302,6 +310,10 @@ async def clear_cart(
     cart = result.scalar_one_or_none()
     if cart:
         for item in list(cart.items):
+            # Restore product stock
+            product = await db.get(Product, item.product_id)
+            if product:
+                product.stock += item.quantity
             await db.delete(item)
         await db.commit()
 

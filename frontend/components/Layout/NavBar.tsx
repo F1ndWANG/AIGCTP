@@ -3,16 +3,19 @@
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/Layout/AuthProvider";
+import ThemeToggle from "@/components/UI/ThemeToggle";
+import NotificationBell from "@/components/UI/NotificationBell";
+import { chatHref, withSession } from "@/lib/session";
 
 export default function NavBar() {
   const pathname = usePathname();
   const { user, loading } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  if (loading || !user || pathname === "/") return null;
+  if (loading || !user) return null;
 
   const links = [
-    { href: "/chat", label: "AI 对话" },
+    { href: chatHref(), label: "AI 对话", match: "/chat" },
     { href: "/plans", label: "行程" },
     { href: "/products", label: "商品" },
     { href: "/restaurants", label: "餐厅" },
@@ -21,13 +24,15 @@ export default function NavBar() {
   ];
 
   return (
-    <nav className="bg-white border-b sticky top-0 z-40">
+    <nav role="navigation" aria-label="主导航" className="bg-white dark:bg-slate-800 border-b dark:border-slate-700 sticky top-0 z-40">
       <div className="max-w-4xl mx-auto px-4">
         {/* Mobile header row */}
         <div className="sm:hidden flex items-center justify-between py-2">
-          <span className="text-sm font-medium text-gray-700">导航</span>
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">导航</span>
           <div className="flex items-center gap-2">
-            <a href="/settings" className="text-gray-400 hover:text-gray-600">
+            <ThemeToggle />
+            <NotificationBell />
+            <a href="/settings" className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.066z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -35,7 +40,7 @@ export default function NavBar() {
             </a>
             <button
               onClick={() => setMenuOpen(!menuOpen)}
-              className="p-1.5 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100"
+              className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700"
               aria-label="切换菜单"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -56,22 +61,24 @@ export default function NavBar() {
           {links.map((link) => (
             <a
               key={link.href}
-              href={link.href}
+              href={link.match === "/chat" ? link.href : withSession(link.href)}
               onClick={() => setMenuOpen(false)}
               className={`block px-4 py-2 text-sm font-medium border-b-2 transition ${
-                pathname.startsWith(link.href)
+                pathname.startsWith(link.match || link.href)
                   ? "text-blue-600 border-blue-600"
-                  : "text-gray-500 border-transparent hover:text-gray-700"
+                  : "text-gray-500 dark:text-gray-400 border-transparent hover:text-gray-700 dark:hover:text-gray-300"
               }`}
             >
               {link.label}
             </a>
           ))}
-          <div className="sm:ml-auto flex items-center gap-3 mt-2 sm:mt-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
+          <div className="sm:ml-auto flex items-center gap-3 mt-2 sm:mt-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100 dark:border-slate-700">
+            <ThemeToggle />
+            <NotificationBell />
             <a
               href="/profile"
               onClick={() => setMenuOpen(false)}
-              className="text-sm text-gray-500 hover:text-gray-700 truncate max-w-[120px]"
+              className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 truncate max-w-[120px]"
               title="个人资料"
             >
               {user.display_name || user.username}
@@ -79,7 +86,7 @@ export default function NavBar() {
             <a
               href="/settings"
               onClick={() => setMenuOpen(false)}
-              className="text-gray-400 hover:text-gray-600 transition"
+              className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition"
               title="设置"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -90,7 +97,7 @@ export default function NavBar() {
             <a
               href="/dashboard"
               onClick={() => setMenuOpen(false)}
-              className="text-gray-400 hover:text-gray-600 transition"
+              className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition"
               title="数据概览"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

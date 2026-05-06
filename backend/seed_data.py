@@ -12,7 +12,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
 from app.core.config import settings
-from app.core.database import Base, get_db
+from app.core.database import Base
 from app.core.security import hash_password
 from app.models.user import User
 from app.models.commerce import Category, Product
@@ -136,21 +136,23 @@ async def seed_database():
         # ── 3. Products ──
         count = 0
         for p in PRODUCTS:
-            cat_name = p.pop("category")
+            product_data = dict(p)
+            cat_name = product_data.pop("category")
             category_id = cat_map.get(cat_name)
             if category_id is None:
-                print(f"⚠️ 跳过商品 {p['name']}，分类 {cat_name} 不存在")
+                print(f"⚠️ 跳过商品 {product_data['name']}，分类 {cat_name} 不存在")
                 continue
 
-            result = await db.execute(select(Product).where(Product.name == p["name"]))
+            result = await db.execute(select(Product).where(Product.name == product_data["name"]))
             existing = result.scalar_one_or_none()
             if not existing:
                 product = Product(
                     category_id=category_id,
                     image_urls=[],
                     specs=[],
-                    tags=p.pop("tags", []),
-                    **p,
+                    tags=product_data.pop("tags", []),
+                    source="seed",
+                    **product_data,
                 )
                 db.add(product)
                 await db.flush()

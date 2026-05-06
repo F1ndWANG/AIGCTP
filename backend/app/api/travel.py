@@ -41,6 +41,25 @@ async def get_plan(
     return TravelPlanResponse.model_validate(plan)
 
 
+@router.post("/plans/{plan_id}/confirm", response_model=TravelPlanResponse)
+async def confirm_plan(
+    plan_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(TravelPlan).where(TravelPlan.id == plan_id, TravelPlan.user_id == current_user.id)
+    )
+    plan = result.scalar_one_or_none()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Travel plan not found")
+
+    plan.status = "confirmed"
+    await db.commit()
+    await db.refresh(plan)
+    return TravelPlanResponse.model_validate(plan)
+
+
 @router.delete("/plans/{plan_id}", status_code=204)
 async def delete_plan(
     plan_id: int,

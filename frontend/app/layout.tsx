@@ -3,6 +3,8 @@ import "./globals.css";
 import AuthProvider from "@/components/Layout/AuthProvider";
 import NavBar from "@/components/Layout/NavBar";
 import { ToastProvider } from "@/components/UI/Toast";
+import { NotificationProvider } from "@/components/UI/NotificationCenter";
+import DietReminder from "@/components/Home/DietReminder";
 import { ErrorBoundary } from "@/components/UI/ErrorBoundary";
 
 export const metadata: Metadata = {
@@ -32,10 +34,13 @@ export default function RootLayout({
       <body>
         <ToastProvider>
           <AuthProvider>
-            <NavBar />
-            <ErrorBoundary>
-              {children}
-            </ErrorBoundary>
+            <NotificationProvider>
+              <NavBar />
+              <DietReminder />
+              <ErrorBoundary>
+                {children}
+              </ErrorBoundary>
+            </NotificationProvider>
           </AuthProvider>
         </ToastProvider>
       </body>

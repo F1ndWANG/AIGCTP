@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/components/Layout/AuthProvider";
 import { useToast } from "@/components/UI/Toast";
 import { commerce as api } from "@/lib/api";
+import { withSession } from "@/lib/session";
 import type { Product } from "@/lib/types";
 
 export default function ProductDetailPage() {
@@ -68,7 +69,7 @@ export default function ProductDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
         <div className="max-w-4xl mx-auto px-4 py-6 animate-pulse space-y-4">
           <div className="h-4 bg-gray-100 rounded w-24" />
           <div className="aspect-square max-w-md bg-gray-100 rounded-lg" />
@@ -85,9 +86,9 @@ export default function ProductDetailPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <p className="text-gray-300 text-5xl mb-4">🔍</p>
-          <p className="text-gray-400 text-sm mb-4">商品不存在或已下架</p>
+          <p className="text-gray-400 dark:text-gray-500 text-sm mb-4">商品不存在或已下架</p>
           <button
-            onClick={() => router.push("/products")}
+            onClick={() => router.push(withSession("/products"))}
             className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             返回商品列表
@@ -106,17 +107,17 @@ export default function ProductDetailPage() {
       <div className="max-w-4xl mx-auto px-4 py-6">
         {/* Back */}
         <button
-          onClick={() => router.back()}
-          className="text-sm text-gray-400 hover:text-gray-600 mb-4 block"
+          onClick={() => router.push(withSession("/products"))}
+          className="text-sm text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 mb-4 block"
         >
-          ← 返回
+          ← 返回商品列表
         </button>
 
-        <div className="bg-white rounded-lg border overflow-hidden">
+        <div className="bg-white dark:bg-slate-800 rounded-lg border dark:border-slate-700 overflow-hidden">
           {/* Image gallery */}
           <div className="md:flex">
             <div className="md:w-1/2 p-4">
-              <div className="aspect-square bg-gray-50 rounded-lg flex items-center justify-center mb-3">
+              <div className="aspect-square bg-gray-50 dark:bg-slate-900 rounded-lg flex items-center justify-center mb-3">
                 {images[0] ? (
                   <img src={images[selectedImage]} alt={product.name} className="w-full h-full object-cover rounded-lg" />
                 ) : (
@@ -146,13 +147,13 @@ export default function ProductDetailPage() {
 
             {/* Product info */}
             <div className="md:w-1/2 p-6 space-y-4">
-              <h1 className="text-xl font-bold text-gray-900">{product.name}</h1>
+              <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">{product.name}</h1>
 
               {/* Price */}
               <div className="flex items-baseline gap-2">
                 <span className="text-3xl font-bold text-red-600">¥{product.price}</span>
                 {hasDiscount && (
-                  <span className="text-lg text-gray-400 line-through">¥{product.original_price}</span>
+                  <span className="text-lg text-gray-400 dark:text-gray-500 line-through">¥{product.original_price}</span>
                 )}
                 <span className="text-sm text-gray-400">/{product.unit}</span>
               </div>
@@ -161,7 +162,7 @@ export default function ProductDetailPage() {
               {product.rating > 0 && (
                 <div className="flex items-center gap-1">
                   <span className="text-yellow-400">{'★'.repeat(Math.round(product.rating))}</span>
-                  <span className="text-sm text-gray-500">{product.rating} 分</span>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">{product.rating} 分</span>
                 </div>
               )}
 
@@ -175,17 +176,17 @@ export default function ProductDetailPage() {
               )}
 
               {/* Stock */}
-              <p className={`text-sm ${outOfStock ? "text-red-500" : "text-gray-500"}`}>
+              <p className={`text-sm ${outOfStock ? "text-red-500" : "text-gray-500 dark:text-gray-400"}`}>
                 {outOfStock ? "暂时缺货" : `库存: ${product.stock} ${product.unit}`}
               </p>
 
               {/* Specs */}
               {product.specs?.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-sm font-medium text-gray-700">规格选择</p>
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">规格选择</p>
                   {product.specs.map((spec) => (
                     <div key={spec.name}>
-                      <p className="text-xs text-gray-500 mb-1">{spec.name}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{spec.name}</p>
                       <div className="flex flex-wrap gap-2">
                         {spec.options.map((opt) => {
                           const isSelected = selectedSpecs[spec.name] === opt;
@@ -211,19 +212,19 @@ export default function ProductDetailPage() {
 
               {/* Quantity */}
               <div className="flex items-center gap-3">
-                <span className="text-sm text-gray-700">数量</span>
-                <div className="flex items-center border rounded-lg">
+                <span className="text-sm text-gray-700 dark:text-gray-300">数量</span>
+                <div className="flex items-center border dark:border-slate-700 rounded-lg">
                   <button
                     onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                    className="px-3 py-1.5 text-gray-500 hover:bg-gray-50"
+                    className="px-3 py-1.5 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-700"
                   >
                     −
                   </button>
-                  <span className="px-4 py-1.5 text-sm min-w-[3rem] text-center border-x">{quantity}</span>
+                  <span className="px-4 py-1.5 text-sm min-w-[3rem] text-center border-x dark:border-slate-700">{quantity}</span>
                   <button
                     onClick={() => setQuantity((q) => Math.min(product.stock, q + 1))}
                     disabled={quantity >= product.stock}
-                    className="px-3 py-1.5 text-gray-500 hover:bg-gray-50 disabled:opacity-30"
+                    className="px-3 py-1.5 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-30"
                   >
                     +
                   </button>
@@ -236,7 +237,7 @@ export default function ProductDetailPage() {
                 disabled={outOfStock || adding}
                 className={`w-full py-3 text-sm font-medium rounded-lg transition ${
                   outOfStock
-                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    ? "bg-gray-100 dark:bg-slate-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
                     : "bg-blue-600 text-white hover:bg-blue-700"
                 }`}
               >
@@ -247,9 +248,9 @@ export default function ProductDetailPage() {
 
           {/* Description */}
           {product.description && (
-            <div className="border-t px-6 py-4">
-              <h2 className="text-sm font-medium text-gray-700 mb-2">商品描述</h2>
-              <p className="text-sm text-gray-500 whitespace-pre-wrap">{product.description}</p>
+            <div className="border-t dark:border-slate-700 px-6 py-4">
+              <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">商品描述</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 whitespace-pre-wrap">{product.description}</p>
             </div>
           )}
         </div>

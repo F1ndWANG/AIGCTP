@@ -13,6 +13,7 @@ from sqlalchemy import select
 from app.services.llm import llm_service
 from app.models.diet import HealthProfile, MealRecord, DietPlan
 from app.core.logging import get_logger
+from app.agents.domain_results import DietAgentResult
 
 logger = get_logger(__name__)
 
@@ -38,7 +39,8 @@ async def recommend_diet(
     db: AsyncSession,
     health_profile: HealthProfile | None = None,
     meal_records: list[MealRecord] | None = None,
-) -> dict[str, Any]:
+    wants_plan: bool = False,
+) -> DietAgentResult:
     """Generate diet recommendation based on user message and health context.
 
     Returns:
@@ -110,7 +112,6 @@ async def recommend_diet(
 
     response_text = result.get("response", "")
     diet_plan_data = result.get("diet_plan")
-    wants_plan = _wants_diet_plan(user_message)
 
     if wants_plan and not _is_valid_diet_plan(diet_plan_data):
         diet_plan_data = _fallback_diet_plan(user_message)
@@ -118,6 +119,8 @@ async def recommend_diet(
 
     # Save diet plan to DB if generated
     if _is_valid_diet_plan(diet_plan_data):
+        activate_markers = ("开始执行", "立即开始", "马上开始", "开始计划", "启用")
+        wants_active = any(marker in user_message for marker in activate_markers)
         try:
             plan = DietPlan(
                 user_id=user_id,
@@ -126,18 +129,16 @@ async def recommend_diet(
                 meals=diet_plan_data.get("meals"),
                 total_nutrition=diet_plan_data.get("total_nutrition"),
                 tips=diet_plan_data.get("tips", []),
-                status="draft",
+                status="active" if wants_active else "draft",
             )
             db.add(plan)
             await db.commit()
             await db.refresh(plan)
         except Exception as e:
             logger.warning("Failed to save diet plan: %s", e)
+            await db.rollback()
 
-    return {
-        "response": response_text,
-        "diet_plan": diet_plan_data,
-    }
+    return DietAgentResult(response=response_text, diet_plan=diet_plan_data)
 
 
 def _wants_diet_plan(user_message: str) -> bool:
@@ -241,7 +242,7 @@ async def log_meal(
     user_id: int,
     user_message: str,
     db: AsyncSession,
-) -> dict[str, Any]:
+) -> DietAgentResult:
     """Parse a natural language meal description into a structured meal record.
 
     Returns:
@@ -281,39 +282,65 @@ async def log_meal(
             "response": "已记录您的饮食信息！",
         }
 
-    # Save to database
+    # Save to database — merge with existing record if same date+meal_type
     try:
-        record = MealRecord(
-            user_id=user_id,
-            date=date.today(),
-            meal_type=result.get("meal_type", "lunch"),
-            foods=result.get("foods", []),
-            total_nutrition=result.get("total_nutrition"),
-            notes=result.get("notes", ""),
+        meal_type = result.get("meal_type", "lunch")
+        today = date.today()
+        existing_result = await db.execute(
+            select(MealRecord).where(
+                MealRecord.user_id == user_id,
+                MealRecord.date == today,
+                MealRecord.meal_type == meal_type,
+            )
         )
-        db.add(record)
+        existing = existing_result.scalar_one_or_none()
+
+        new_foods = result.get("foods", [])
+        if existing:
+            existing_foods = existing.foods or []
+            existing_names = {f.get("name") for f in existing_foods}
+            for f in new_foods:
+                if f.get("name") not in existing_names:
+                    existing_foods.append(f)
+            existing.foods = existing_foods
+            if result.get("total_nutrition"):
+                existing.total_nutrition = result["total_nutrition"]
+            if result.get("notes"):
+                existing.notes = result["notes"]
+            record = existing
+        else:
+            record = MealRecord(
+                user_id=user_id,
+                date=today,
+                meal_type=meal_type,
+                foods=new_foods,
+                total_nutrition=result.get("total_nutrition"),
+                notes=result.get("notes", ""),
+            )
+            db.add(record)
         await db.commit()
         await db.refresh(record)
     except Exception as e:
         logger.warning("Failed to save meal record: %s", e)
-        return {"response": "抱歉，记录饮食时出现错误，请稍后再试。"}
+        await db.rollback()
+        return DietAgentResult(response="抱歉，记录饮食时出现错误，请稍后再试。")
 
-    return {
-        "response": result.get("response", "已记录您的饮食信息！"),
-        "meal_record": {
+    return DietAgentResult(
+        response=result.get("response", "已记录您的饮食信息！"),
+        meal_record={
             "id": record.id,
             "date": str(record.date),
             "meal_type": record.meal_type,
             "foods": record.foods,
             "total_nutrition": record.total_nutrition,
         },
-    }
+    )
 
 
 async def analyze_nutrition(
     user_message: str,
     meal_records: list[dict],
-) -> dict[str, Any]:
+) -> DietAgentResult:
     """Analyze nutrition from recent meal records.
 
     Returns:
@@ -347,7 +374,7 @@ async def analyze_nutrition(
         logger.warning("Analyze nutrition failed: %s", e)
         response = "暂时无法分析您的饮食记录，请稍后再试。"
 
-    return {"response": response}
+    return DietAgentResult(response=response)
 
 
 def _format_health_profile(profile: HealthProfile | None) -> str:

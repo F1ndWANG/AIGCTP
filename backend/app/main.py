@@ -5,11 +5,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.core.database import init_db
+from app.core.database import async_session, init_db
 from app.core.redis import close_redis
 from app.core.logging import setup_logging, get_logger
-from app.api import auth, users, travel, chat, route, diet, commerce, feedback, restaurant
+from app.api import auth, users, travel, chat, route, diet, commerce, feedback, restaurant, runtime
 from app.middleware.rate_limit import RateLimitMiddleware
+from app.services.demo_catalog import ensure_demo_catalog
 
 logger = get_logger(__name__)
 
@@ -30,6 +31,8 @@ async def lifespan(app: FastAPI):
     setup_logging(debug=settings.DEBUG)
     _validate_env()
     await init_db()
+    async with async_session() as db:
+        await ensure_demo_catalog(db)
     yield
     await close_redis()
 
@@ -58,6 +61,7 @@ app.include_router(diet.router, prefix="/api/v1")
 app.include_router(commerce.router, prefix="/api/v1")
 app.include_router(feedback.router, prefix="/api/v1")
 app.include_router(restaurant.router, prefix="/api/v1")
+app.include_router(runtime.router, prefix="/api/v1")
 
 
 @app.get("/health")

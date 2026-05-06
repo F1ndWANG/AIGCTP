@@ -37,6 +37,7 @@ export default function SimpleMap({
 }: SimpleMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletMap = useRef<L.Map | null>(null);
+  const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!mapRef.current || leafletMap.current) return;
@@ -53,6 +54,10 @@ export default function SimpleMap({
     leafletMap.current = map;
 
     return () => {
+      if (resizeTimerRef.current) {
+        clearTimeout(resizeTimerRef.current);
+        resizeTimerRef.current = null;
+      }
       map.remove();
       leafletMap.current = null;
     };
@@ -95,8 +100,17 @@ export default function SimpleMap({
       map.setView([markers[0].lat, markers[0].lng], zoom);
     }
 
-    // Fix map rendering in modals/dialogs
-    setTimeout(() => map.invalidateSize(), 200);
+    // Fix map rendering in modals/dialogs. Leaflet may throw if the
+    // component unmounts before the delayed resize runs.
+    if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
+    resizeTimerRef.current = setTimeout(() => {
+      if (leafletMap.current !== map || !mapRef.current) return;
+      try {
+        map.invalidateSize();
+      } catch {
+        // Ignore stale Leaflet instances during React remounts.
+      }
+    }, 200);
   }, [markers, center, zoom]);
 
   return (

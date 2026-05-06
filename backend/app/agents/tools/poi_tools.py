@@ -56,6 +56,11 @@ async def search_pois(
     # Try DB cache next
     stmt = select(CachedPOI)
     if city:
+        stmt = stmt.where(
+            CachedPOI.address.ilike(f"%{city}%") &
+            (CachedPOI.name.ilike(f"%{keywords}%") | CachedPOI.tags.contains([keywords]))
+        )
+    else:
         stmt = stmt.where(CachedPOI.name.ilike(f"%{keywords}%") | CachedPOI.tags.contains([keywords]))
     stmt = stmt.limit(limit)
     result = await db.execute(stmt)
@@ -81,15 +86,17 @@ async def search_pois(
     api_types = category or None
     pois = await amap_service.search_poi(keywords, city=city, types=api_types, page_size=limit)
 
+    if not pois:
+        return []
+
     # Cache results — safe type conversions for SQLite compatibility
+    cached_new = False
     for poi in pois[:limit]:
         existing = await db.execute(
             select(CachedPOI).where(CachedPOI.name == poi["name"], CachedPOI.source == "amap")
         )
         if not existing.scalar_one_or_none():
-            # Write to Redis cache
-            await set_list(cache_key, pois[:limit], ttl=settings.REDIS_TTL_POI)
-
+            cached_new = True
             db.add(CachedPOI(
                 source="amap",
                 poi_id=_to_str(poi.get("poi_id"), None),
@@ -105,6 +112,12 @@ async def search_pois(
                 image_urls=_to_list(poi.get("image_urls")),
                 raw_data=poi,
             ))
+
+    if cached_new:
+        await db.commit()
+
+    # Write to Redis cache once after the loop
+    await set_list(cache_key, pois[:limit], ttl=settings.REDIS_TTL_POI)
 
     return pois[:limit]
 

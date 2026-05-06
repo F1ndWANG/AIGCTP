@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/Layout/AuthProvider";
 import CartView from "@/components/Commerce/CartView";
 import OrdersView from "@/components/Commerce/OrdersView";
+import { chatHref } from "@/lib/session";
 
 type Tab = "cart" | "orders";
 
@@ -27,14 +28,14 @@ export default function CartPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
       {/* Header */}
-      <div className="bg-white border-b">
+      <div className="bg-white dark:bg-slate-800 border-b dark:border-slate-700">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-3">
-          <button onClick={() => router.push("/chat")} className="text-sm text-gray-400 hover:text-gray-600">
+          <button onClick={() => router.push(chatHref())} className="text-sm text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">
             ← 返回对话
           </button>
-          <h1 className="text-lg font-bold text-gray-900">购物</h1>
+          <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">购物</h1>
         </div>
 
         {/* Tabs */}
@@ -46,7 +47,7 @@ export default function CartPage() {
               className={`px-5 py-3 text-sm font-medium border-b-2 transition ${
                 activeTab === tab.key
                   ? "text-blue-600 border-blue-600"
-                  : "text-gray-500 border-transparent hover:text-gray-700"
+                  : "text-gray-500 dark:text-gray-400 border-transparent hover:text-gray-700 dark:hover:text-gray-300"
               }`}
             >
               {tab.label}
@@ -57,7 +58,7 @@ export default function CartPage() {
 
       {/* Content */}
       <div className="max-w-4xl mx-auto px-4 py-6">
-        {activeTab === "cart" && <CartView onNavigateChat={() => router.push("/chat")} />}
+        {activeTab === "cart" && <CartView onNavigateChat={() => router.push(chatHref())} />}
         {activeTab === "orders" && <OrdersView />}
       </div>
     </div>

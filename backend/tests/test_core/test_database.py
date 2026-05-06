@@ -11,5 +11,6 @@ class TestDatabase:
             "users", "user_preferences", "travel_plans",
             "conversations", "cached_pois",
             "health_profiles", "meal_records", "diet_plans",
+            "task_runs", "domain_events",
         }
         assert expected.issubset(set(table_names)), f"Missing tables: {expected - set(table_names)}"

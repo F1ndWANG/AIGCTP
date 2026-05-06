@@ -4,11 +4,24 @@ import { Suspense, useState, useCallback, useRef, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/Layout/AuthProvider";
 import { useToast } from "@/components/UI/Toast";
+import ThemeToggle from "@/components/UI/ThemeToggle";
 import MessageList from "@/components/Chat/MessageList";
 import ChatInput from "@/components/Chat/ChatInput";
-import TravelPlanCard from "@/components/TravelPlan/TravelPlanCard";
-import { chat as chatApi, commerce as commerceApi, travel as travelApi } from "@/lib/api";
-import type { Message, TravelPlanResponse, TravelPlanListItem, ChatSession, ProductListItem } from "@/lib/types";
+import SuggestionChips from "@/components/Chat/SuggestionChips";
+import ChatResultCards from "@/components/Chat/ChatResultCards";
+import ProductSearchPanel from "@/components/Chat/ProductSearchPanel";
+import HistoryPanels from "@/components/Chat/HistoryPanels";
+import ChatSearch from "@/components/Chat/ChatSearch";
+import { ApiError, chat as chatApi, commerce as commerceApi, travel as travelApi } from "@/lib/api";
+import { setActiveSessionId } from "@/lib/session";
+import type {
+  Message,
+  TravelPlanResponse,
+  TravelPlanListItem,
+  ChatSession,
+  ProductListItem,
+  SavedRestaurantRecommendation,
+} from "@/lib/types";
 
 function generateId(): string {
   try { return crypto.randomUUID(); } catch { return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`; }
@@ -19,6 +32,8 @@ function ChatPageContent() {
   const { toast } = useToast();
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
   const [sending, setSending] = useState(false);
   const [sessionId, setSessionId] = useState<string | undefined>();
   const sessionIdRef = useRef(sessionId);
@@ -32,16 +47,23 @@ function ChatPageContent() {
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [showChatHistory, setShowChatHistory] = useState(false);
   const [showProductSearch, setShowProductSearch] = useState(false);
-  const [searchKeyword, setSearchKeyword] = useState("");
-  const [searchResults, setSearchResults] = useState<ProductListItem[]>([]);
-  const [searching, setSearching] = useState(false);
+  const [currentProducts, setCurrentProducts] = useState<ProductListItem[]>([]);
+  const [currentRestaurantRec, setCurrentRestaurantRec] = useState<SavedRestaurantRecommendation | null>(null);
+  const [currentDietPlan, setCurrentDietPlan] = useState<Record<string, unknown> | null>(null);
+  const [currentCartItems, setCurrentCartItems] = useState<Array<Record<string, unknown>>>([]);
+  const [confirmingPlan, setConfirmingPlan] = useState(false);
+  const [failedMessages, setFailedMessages] = useState<Set<number>>(new Set());
+  const lastSentMessageRef = useRef<string>("");
   const abortRef = useRef<AbortController | null>(null);
+  const restoredSessionRef = useRef<string | null>(null);
   const searchParams = useSearchParams();
 
   // Restore session from URL query param
   useEffect(() => {
     const sid = searchParams.get("session");
-    if (sid) restoreSession(sid);
+    if (!sid || restoredSessionRef.current === sid) return;
+    restoredSessionRef.current = sid;
+    restoreSession(sid);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -55,9 +77,12 @@ function ChatPageContent() {
       const userMsg: Message = { role: "user", content: message };
       setMessages((prev) => [...prev, userMsg]);
       setSending(true);
+      lastSentMessageRef.current = message;
+      setFailedMessages(new Set());
 
       const sid = sessionIdRef.current || generateId();
       if (!sessionIdRef.current) setSessionId(sid);
+      setActiveSessionId(sid);
 
       // Add placeholder assistant message for streaming
       setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
@@ -88,10 +113,16 @@ function ChatPageContent() {
           onPlan: (plan: Record<string, unknown>) => {
             setCurrentPlan(plan as unknown as TravelPlanResponse);
           },
+          onProducts: (products) => setCurrentProducts(products),
+          onRestaurants: (recommendation) => setCurrentRestaurantRec(recommendation),
+          onDietPlan: (plan) => setCurrentDietPlan(plan),
+          onCartItems: (items) => setCurrentCartItems(items),
           onDone: () => { setSending(false); setThinkingText(""); },
           onError: (err: Error) => {
             toast(err.message, "error");
             setSending(false);
+            setThinkingText("");
+            setFailedMessages(new Set([messagesRef.current.length - 1]));
           },
         },
         sid,
@@ -101,6 +132,37 @@ function ChatPageContent() {
     },
     [toast]
   );
+
+  const handleRetry = useCallback(() => {
+    const lastMsg = lastSentMessageRef.current;
+    if (!lastMsg) return;
+    // Remove the last user + assistant pair
+    setMessages((prev) => {
+      const copy = [...prev];
+      if (copy.length >= 2) {
+        copy.splice(copy.length - 2, 2);
+      }
+      return copy;
+    });
+    setFailedMessages(new Set());
+    // Re-send immediately
+    setTimeout(() => handleSend(lastMsg), 0);
+  }, [handleSend]);
+
+  const handleConfirmPlan = async (id: number) => {
+    if (confirmingPlan) return;
+    setConfirmingPlan(true);
+    try {
+      const confirmed = await travelApi.confirm(id);
+      setCurrentPlan(confirmed);
+      toast("最终行程已确认", "success");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "未知错误";
+      toast("确认失败: " + msg, "error");
+    } finally {
+      setConfirmingPlan(false);
+    }
+  };
 
   const loadHistory = async () => {
     try {
@@ -119,11 +181,22 @@ function ChatPageContent() {
     } catch { toast("加载历史对话失败", "error"); }
   };
 
+  const resetConversationState = () => {
+    setMessages([]);
+    setSessionId(undefined);
+    setCurrentPlan(null);
+    setCurrentProducts([]);
+    setCurrentRestaurantRec(null);
+    setCurrentDietPlan(null);
+    setCurrentCartItems([]);
+  };
+
   const restoreSession = async (sid: string) => {
     try {
       const detail = await chatApi.getSession(sid);
       setMessages(detail.messages);
       setSessionId(detail.session_id);
+      setActiveSessionId(detail.session_id);
       const planContext = (detail.context?.current_travel_plan || null) as {
         id?: number;
         destination?: string;
@@ -150,33 +223,60 @@ function ChatPageContent() {
       } else {
         setCurrentPlan(null);
       }
+      const products = detail.context?.current_products as ProductListItem[] | undefined;
+      const restaurantRec = detail.context?.current_restaurant_recommendation as SavedRestaurantRecommendation | undefined;
+      const dietPlan = detail.context?.current_diet_plan as Record<string, unknown> | undefined;
+      const cartItems = detail.context?.current_cart_items as Array<Record<string, unknown>> | undefined;
+      setCurrentProducts(products || []);
+      setCurrentRestaurantRec(restaurantRec || null);
+      setCurrentDietPlan(dietPlan || null);
+      setCurrentCartItems(cartItems || []);
       setShowChatHistory(false);
-    } catch { toast("加载对话失败", "error"); }
+    } catch (err) {
+      const staleSession = err instanceof ApiError && [403, 404].includes(err.status);
+      if (staleSession) {
+        resetConversationState();
+        setActiveSessionId(null);
+        setShowChatHistory(false);
+        router.replace("/chat");
+        const marker = `stale_chat_session_notified:${sid}`;
+        const alreadyNotified = window.sessionStorage.getItem(marker) === "1";
+        if (!alreadyNotified) {
+          window.sessionStorage.setItem(marker, "1");
+          toast("历史对话不存在，已开启新对话", "info");
+        }
+        return;
+      }
+      toast("加载对话失败，请稍后重试", "error");
+    }
   };
 
   const deleteSession = async (sid: string) => {
-    if (!confirm("确定删除该对话？")) return;
     try {
       await chatApi.deleteSession(sid);
       setChatSessions((prev) => prev.filter((s) => s.session_id !== sid));
-      toast("已删除", "success");
+      if (sid === sessionIdRef.current) {
+        resetConversationState();
+        setActiveSessionId(null);
+        router.replace("/chat");
+      }
+      toast("对话已删除", "info", {
+        label: "撤销",
+        onClick: async () => {
+          // Re-create by restoring: refresh sessions list
+          try {
+            const sessions = await chatApi.listSessions();
+            setChatSessions(sessions);
+          } catch { /* ignore */ }
+        },
+      });
     } catch { toast("删除失败", "error"); }
   };
 
   const newChat = () => {
-    setMessages([]);
-    setSessionId(undefined);
-    setCurrentPlan(null);
-  };
-
-  const handleProductSearch = async () => {
-    if (!searchKeyword.trim()) return;
-    setSearching(true);
-    try {
-      const data = await commerceApi.listProducts({ keyword: searchKeyword.trim(), page_size: 6 });
-      setSearchResults(data.items);
-    } catch { toast("搜索失败", "error"); }
-    setSearching(false);
+    resetConversationState();
+    setActiveSessionId(null);
+    router.replace("/chat");
   };
 
   const handleAddToCart = async (productId: number) => {
@@ -184,6 +284,23 @@ function ChatPageContent() {
       await commerceApi.addCartItem({ product_id: productId, quantity: 1 });
       toast("已加入购物车", "success");
     } catch { toast("加入购物车失败", "error"); }
+  };
+
+  // Derived state for SuggestionChips
+  const lastAssistantMessage = (() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant" && messages[i].content) return messages[i].content;
+    }
+    return "";
+  })();
+
+  const chipContext = {
+    show: !sending && messages.some((m) => m.role === "assistant" && m.content),
+    lastResponse: lastAssistantMessage,
+    hasTravelPlan: !!currentPlan,
+    hasProducts: currentProducts.length > 0,
+    hasRestaurants: !!currentRestaurantRec,
+    hasDietPlan: !!currentDietPlan,
   };
 
   if (loading) {
@@ -200,12 +317,12 @@ function ChatPageContent() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
+    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-slate-900">
       {/* Header */}
-      <header className="bg-white border-b px-4 py-3">
+      <header className="bg-white dark:bg-slate-800 border-b dark:border-slate-700 px-4 py-3">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <h1 className="font-bold text-lg">AI 生活推荐</h1>
+            <h1 className="font-bold text-lg text-gray-900 dark:text-gray-100">AI 生活推荐</h1>
             <button
               onClick={newChat}
               className="text-xs px-3 py-1.5 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 transition"
@@ -214,16 +331,17 @@ function ChatPageContent() {
             </button>
             <button
               onClick={loadHistory}
-              className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-full hover:bg-gray-200 transition"
+              className="text-xs px-3 py-1.5 bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-slate-600 transition"
             >
               历史行程
             </button>
             <button
               onClick={loadChatSessions}
-              className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-full hover:bg-gray-200 transition"
+              className="text-xs px-3 py-1.5 bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-slate-600 transition"
             >
               历史对话
             </button>
+            <ChatSearch messages={messages} />
             <button
               onClick={() => setShowProductSearch(!showProductSearch)}
               className="text-xs px-3 py-1.5 bg-orange-50 text-orange-600 rounded-full hover:bg-orange-100 transition"
@@ -232,10 +350,11 @@ function ChatPageContent() {
             </button>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-500">{user.display_name}</span>
+            <ThemeToggle />
+            <span className="text-sm text-gray-500 dark:text-gray-400">{user.display_name}</span>
             <button
               onClick={() => logout()}
-              className="text-xs px-3 py-1.5 text-red-500 hover:bg-red-50 rounded-full transition"
+              className="text-xs px-3 py-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-full transition"
             >
               退出
             </button>
@@ -243,148 +362,58 @@ function ChatPageContent() {
         </div>
       </header>
 
-      {/* History Panel */}
-      {showHistory && (
-        <div className="bg-white border-b max-h-60 overflow-y-auto">
-          <div className="max-w-4xl mx-auto p-4">
-            <h3 className="text-sm font-medium text-gray-500 mb-3">
-              历史行程 ({history.length})
-            </h3>
-            {history.length === 0 ? (
-              <p className="text-sm text-gray-400">暂无历史行程</p>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                {history.map((plan) => (
-                  <button
-                    key={plan.id}
-                    onClick={() => {
-                      const sid = sessionIdRef.current;
-                      router.push(sid ? `/travel/${plan.id}?session=${sid}` : `/travel/${plan.id}`);
-                      setShowHistory(false);
-                    }}
-                    className="text-left p-3 border rounded-lg hover:bg-gray-50 transition"
-                  >
-                    <p className="font-medium text-sm">{plan.destination}</p>
-                    <p className="text-xs text-gray-400">
-                      {plan.days}天 · {plan.status}
-                    </p>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Chat History Panel */}
-      {showChatHistory && (
-        <div className="bg-white border-b max-h-60 overflow-y-auto">
-          <div className="max-w-4xl mx-auto p-4">
-            <h3 className="text-sm font-medium text-gray-500 mb-3">
-              历史对话 ({chatSessions.length})
-            </h3>
-            {chatSessions.length === 0 ? (
-              <p className="text-sm text-gray-400">暂无历史对话</p>
-            ) : (
-              <div className="space-y-1">
-                {chatSessions.map((session) => (
-                  <div
-                    key={session.session_id}
-                    className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 group"
-                  >
-                    <button
-                      onClick={() => restoreSession(session.session_id)}
-                      className="flex-1 text-left min-w-0"
-                    >
-                      <p className="text-sm font-medium truncate">
-                        {session.title || "未命名对话"}
-                      </p>
-                      <p className="text-xs text-gray-400 truncate">
-                        {session.last_preview}
-                      </p>
-                      <p className="text-xs text-gray-300">
-                        {new Date(session.updated_at).toLocaleDateString("zh-CN")}
-                        · {session.message_count} 条消息
-                      </p>
-                    </button>
-                    <button
-                      onClick={() => deleteSession(session.session_id)}
-                      className="text-xs text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition flex-shrink-0"
-                    >
-                      删除
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* History Panels */}
+      <HistoryPanels
+        showHistory={showHistory}
+        history={history}
+        showChatHistory={showChatHistory}
+        chatSessions={chatSessions}
+        sessionId={sessionIdRef.current}
+        onViewTravelPlan={(id) => {
+          router.push(`/travel/${id}${sessionIdRef.current ? `?session=${sessionIdRef.current}` : ""}`);
+          setShowHistory(false);
+        }}
+        onRestoreSession={restoreSession}
+        onDeleteSession={deleteSession}
+      />
 
       {/* Messages */}
-      <MessageList messages={messages} loading={sending} thinkingText={thinkingText} />
+      <MessageList
+        messages={messages}
+        loading={sending}
+        thinkingText={thinkingText}
+        onRetry={handleRetry}
+        failedMessages={failedMessages}
+      />
 
-      {/* Current Travel Plan */}
-      {currentPlan && currentPlan.itinerary && (
-        <div className="max-w-2xl mx-auto w-full px-4 pb-4">
-          <TravelPlanCard
-            plan={currentPlan}
-            onView={(id: number) => router.push(`/travel/${id}?session=${sessionId || sessionIdRef.current || ""}`)}
-          />
-        </div>
-      )}
+      {/* Result Cards */}
+      <ChatResultCards
+        currentPlan={currentPlan}
+        currentProducts={currentProducts}
+        currentRestaurantRec={currentRestaurantRec}
+        currentDietPlan={currentDietPlan}
+        currentCartItems={currentCartItems}
+        sessionId={sessionIdRef.current}
+        onConfirmPlan={handleConfirmPlan}
+        confirmingPlan={confirmingPlan}
+        onAddToCart={handleAddToCart}
+      />
 
       {/* Product Search Panel */}
       {showProductSearch && (
-        <div className="border-t bg-white max-h-64 overflow-y-auto">
-          <div className="max-w-2xl mx-auto w-full px-4 py-3">
-            <div className="flex gap-2 mb-3">
-              <input
-                type="text"
-                value={searchKeyword}
-                onChange={(e) => setSearchKeyword(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleProductSearch()}
-                placeholder="搜索商品..."
-                className="flex-1 px-3 py-1.5 text-sm border rounded-lg focus:outline-none focus:border-blue-400"
-                autoFocus
-              />
-              <button
-                onClick={handleProductSearch}
-                disabled={searching}
-                className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-              >
-                {searching ? "..." : "搜索"}
-              </button>
-              <button
-                onClick={() => { setShowProductSearch(false); setSearchResults([]); setSearchKeyword(""); }}
-                className="px-2 py-1.5 text-sm text-gray-400 hover:text-gray-600"
-              >
-                ✕
-              </button>
-            </div>
-            {searchResults.length > 0 && (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {searchResults.map((p) => (
-                  <div key={p.id} className="border rounded-lg p-2 flex flex-col gap-1">
-                    <p className="text-xs font-medium truncate">{p.name}</p>
-                    <p className="text-xs text-red-600 font-bold">¥{p.price}</p>
-                    <button
-                      onClick={() => handleAddToCart(p.id)}
-                      disabled={p.stock < 1}
-                      className="text-xs py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-400"
-                    >
-                      {p.stock < 1 ? "缺货" : "加购"}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {searchKeyword && !searching && searchResults.length === 0 && (
-              <p className="text-xs text-gray-400 text-center py-2">未找到相关商品</p>
-            )}
-          </div>
-        </div>
+        <ProductSearchPanel onAddToCart={handleAddToCart} />
       )}
+
+      {/* Suggestion Chips */}
+      <SuggestionChips
+        onSelect={handleSend}
+        show={chipContext.show}
+        lastResponse={chipContext.lastResponse}
+        hasTravelPlan={chipContext.hasTravelPlan}
+        hasProducts={chipContext.hasProducts}
+        hasRestaurants={chipContext.hasRestaurants}
+        hasDietPlan={chipContext.hasDietPlan}
+      />
 
       {/* Input */}
       <ChatInput onSend={handleSend} disabled={sending} />

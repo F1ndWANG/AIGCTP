@@ -1,55 +1,79 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/components/Layout/AuthProvider";
+import { useToast } from "@/components/UI/Toast";
+import PersonalDashboard from "@/components/Home/PersonalDashboard";
 import { auth, setToken } from "@/lib/api";
 
 export default function HomePage() {
+  const { user, loading: authLoading, refreshUser } = useAuth();
+  const { toast } = useToast();
   const router = useRouter();
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    const token = localStorage.getItem("auth_token");
-    if (token) router.push("/chat");
-  }, [router]);
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-900">
+        <div className="animate-spin w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  // Logged in — show personalized dashboard
+  if (user) {
+    return <PersonalDashboard />;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setLoading(true);
+    setSubmitting(true);
     try {
-      const result = isLogin
-        ? await auth.login(username, password)
-        : await auth.register(username, password, displayName);
+      if (!isLogin) {
+        await auth.register(username, password, displayName);
+        setPassword("");
+        setDisplayName("");
+        setIsLogin(true);
+        setSubmitting(false);
+        toast("注册成功，请登录", "success");
+        return;
+      }
+
+      const result = await auth.login(username, password);
       setToken(result.access_token);
-      // Keep loading state during navigation (router.push is async)
-      await router.push("/chat");
+      await refreshUser?.();
+      toast("登录成功", "success");
+      router.replace("/");
     } catch (err: any) {
       setError(err.message || "操作失败");
-      setLoading(false);
+    } finally {
+      setSubmitting(false);
     }
   };
 
+  // Not logged in — show login form
   return (
     <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8">
+      <div className="w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-8">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
             AI 生活推荐
           </h1>
-          <p className="text-gray-500">
+          <p className="text-gray-500 dark:text-gray-400">
             智能旅行 · 饮食健康 · AI 购物
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               用户名
             </label>
             <input
@@ -64,7 +88,7 @@ export default function HomePage() {
 
           {!isLogin && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 显示名称
               </label>
               <input
@@ -78,7 +102,7 @@ export default function HomePage() {
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               密码
             </label>
             <input
@@ -97,14 +121,14 @@ export default function HomePage() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={submitting}
             className="w-full py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50"
           >
-            {loading ? "处理中..." : isLogin ? "登录" : "注册"}
+            {submitting ? "处理中..." : isLogin ? "登录" : "注册"}
           </button>
         </form>
 
-        <p className="text-center mt-6 text-sm text-gray-500">
+        <p className="text-center mt-6 text-sm text-gray-500 dark:text-gray-400">
           {isLogin ? "还没有账号？" : "已有账号？"}
           <button
             onClick={() => { setIsLogin(!isLogin); setError(""); }}

@@ -4,7 +4,9 @@ from app.models.conversation import Conversation
 from app.models.cache import CachedPOI
 from app.models.diet import HealthProfile, MealRecord, DietPlan
 from app.models.commerce import Category, Product, Cart, CartItem, Order
+from app.models.restaurant import RestaurantRecommendation
 from app.models.feedback import RecommendationLog
+from app.models.runtime import DomainEvent, TaskRun
 
 __all__ = [
     "User",
@@ -20,5 +22,8 @@ __all__ = [
     "Cart",
     "CartItem",
     "Order",
+    "RestaurantRecommendation",
     "RecommendationLog",
+    "TaskRun",
+    "DomainEvent",
 ]

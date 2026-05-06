@@ -6,6 +6,7 @@ import { useAuth } from "@/components/Layout/AuthProvider";
 import { useToast } from "@/components/UI/Toast";
 import TravelPlanCard from "@/components/TravelPlan/TravelPlanCard";
 import { travel as travelApi, chat as chatApi } from "@/lib/api";
+import { chatHref, setActiveSessionId } from "@/lib/session";
 import type { TravelPlanResponse } from "@/lib/types";
 
 export default function TravelDetailPage() {
@@ -21,6 +22,11 @@ export default function TravelDetailPage() {
   const [loading, setLoading] = useState(true);
   const [adjustInput, setAdjustInput] = useState("");
   const [adjusting, setAdjusting] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+
+  useEffect(() => {
+    if (sessionId) setActiveSessionId(sessionId);
+  }, [sessionId]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -42,6 +48,7 @@ export default function TravelDetailPage() {
     try {
       const result = await chatApi.send(adjustInput, sessionId, plan.id);
       setSessionId(result.session_id);
+      setActiveSessionId(result.session_id);
       setAdjustInput("");
       if (result.travel_plan) {
         setPlan(result.travel_plan);
@@ -62,10 +69,25 @@ export default function TravelDetailPage() {
     try {
       await travelApi.delete(plan.id);
       toast("行程已删除", "info");
-      router.push(sessionId ? `/chat?session=${sessionId}` : "/chat");
+      router.push(chatHref(sessionId));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "未知错误";
       toast("删除失败: " + msg, "error");
+    }
+  };
+
+  const handleConfirm = async () => {
+    if (!plan || confirming) return;
+    setConfirming(true);
+    try {
+      const confirmed = await travelApi.confirm(plan.id);
+      setPlan(confirmed);
+      toast("最终行程已确认", "success");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "未知错误";
+      toast("确认失败: " + msg, "error");
+    } finally {
+      setConfirming(false);
     }
   };
 
@@ -79,12 +101,12 @@ export default function TravelDetailPage() {
 
   if (!plan) return null;
 
-  const backToChatHref = sessionId ? `/chat?session=${sessionId}` : "/chat";
+  const backToChatHref = chatHref(sessionId);
 
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main className="min-h-screen bg-gray-50 dark:bg-slate-900">
       {/* Header */}
-      <header className="bg-white border-b px-4 py-3">
+      <header className="bg-white dark:bg-slate-800 border-b dark:border-slate-700 px-4 py-3">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <button
             onClick={() => router.push(backToChatHref)}
@@ -102,18 +124,29 @@ export default function TravelDetailPage() {
       </header>
 
       <div className="max-w-3xl mx-auto p-4 space-y-4">
-        <TravelPlanCard plan={plan} />
+        <TravelPlanCard
+          plan={plan}
+          onConfirm={handleConfirm}
+          confirming={confirming}
+        />
 
         {/* Adjust */}
-        <div className="bg-white rounded-xl border p-5">
-          <h3 className="font-semibold text-gray-700 mb-3">调整行程</h3>
+        <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 p-5">
+          <div className="mb-3">
+            <h3 className="font-semibold text-gray-700 dark:text-gray-300">调整行程</h3>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+              {plan.status === "confirmed"
+                ? "已确认的行程再次调整后会回到草稿状态，需要重新确认。"
+                : "当前是草稿，可继续通过 AI 对话修改，满意后确认最终行程。"}
+            </p>
+          </div>
           <div className="flex gap-2">
             <input
               type="text"
               value={adjustInput}
               onChange={(e) => setAdjustInput(e.target.value)}
               placeholder="例如：第二天太赶了 / 预算控制在2000以内"
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
             />
             <button
               onClick={handleAdjust}
@@ -123,7 +156,7 @@ export default function TravelDetailPage() {
               {adjusting ? "处理中..." : "调整"}
             </button>
           </div>
-          <p className="text-xs text-gray-400 mt-2">
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
             输入你的调整需求，AI 会重新规划行程
           </p>
         </div>

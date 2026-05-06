@@ -55,11 +55,11 @@ export default function OrdersView() {
       <div>
         <button
           onClick={() => setSelectedOrder(null)}
-          className="text-sm text-gray-400 hover:text-gray-600 mb-4 block"
+          className="text-sm text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 mb-4 block"
         >
           ← 返回订单列表
         </button>
-        <div className="bg-white rounded-lg border p-4">
+        <div className="bg-white dark:bg-slate-800 rounded-lg border dark:border-slate-700 p-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-medium">订单 #{selectedOrder.id}</h3>
             <span className={`text-xs font-medium px-2 py-0.5 rounded ${
@@ -67,7 +67,7 @@ export default function OrdersView() {
               selectedOrder.status === "paid" ? "bg-blue-100 text-blue-700" :
               selectedOrder.status === "shipped" ? "bg-indigo-100 text-indigo-700" :
               selectedOrder.status === "pending" ? "bg-yellow-100 text-yellow-700" :
-              "bg-gray-100 text-gray-500"
+              "bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-gray-400"
             }`}>
               {selectedOrder.status === "pending" ? "待付款" :
                selectedOrder.status === "paid" ? "已付款" :
@@ -141,19 +141,19 @@ export default function OrdersView() {
                 </div>
                 <div className="flex-1">
                   <p className="font-medium">{item.name}</p>
-                  <p className="text-gray-400 text-xs">x{item.quantity} ¥{item.price}</p>
+                  <p className="text-gray-400 dark:text-gray-500 text-xs">x{item.quantity} ¥{item.price}</p>
                 </div>
                 <span className="font-medium">¥{(item.price * item.quantity).toFixed(2)}</span>
               </div>
             ))}
           </div>
-          <div className="mt-4 pt-4 border-t text-sm text-gray-500 space-y-1">
+          <div className="mt-4 pt-4 border-t dark:border-slate-700 text-sm text-gray-500 dark:text-gray-400 space-y-1">
             {selectedOrder.shipping_address && <p>收货地址: {selectedOrder.shipping_address}</p>}
             {selectedOrder.contact_phone && <p>联系电话: {selectedOrder.contact_phone}</p>}
             {selectedOrder.notes && <p>备注: {selectedOrder.notes}</p>}
           </div>
-          <div className="mt-4 pt-4 border-t flex justify-between items-center">
-            <span className="text-sm text-gray-500">合计</span>
+          <div className="mt-4 pt-4 border-t dark:border-slate-700 flex justify-between items-center">
+            <span className="text-sm text-gray-500 dark:text-gray-400">合计</span>
             <span className="text-xl font-bold text-red-600">¥{selectedOrder.total_amount.toFixed(2)}</span>
           </div>
           {selectedOrder.status === "completed" && (
@@ -185,7 +185,7 @@ export default function OrdersView() {
     return (
       <div className="text-center py-16">
         <p className="text-gray-300 text-5xl mb-4">📋</p>
-        <p className="text-gray-400 text-sm">暂无订单</p>
+        <p className="text-gray-400 dark:text-gray-500 text-sm">暂无订单</p>
         <p className="text-gray-300 text-xs mt-1">去购物车下一单吧！</p>
       </div>
     );

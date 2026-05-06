@@ -7,8 +7,11 @@ Leverages existing Amap search_restaurants and search_around APIs.
 import json
 from typing import Any, Optional
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.services.llm import llm_service
-from app.services.amap import amap_service
+from app.agents.tools.poi_tools import search_restaurants as poi_search_restaurants
+from app.agents.domain_results import RestaurantAgentResult
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -34,25 +37,30 @@ async def recommend_restaurants(
     user_message: str,
     dietary_restrictions: list[str] | None = None,
     cuisine: str | None = None,
-) -> dict[str, Any]:
+    db: AsyncSession | None = None,
+) -> RestaurantAgentResult:
     """Recommend restaurants in a city based on preferences.
 
     Returns:
         dict with keys: response (str), restaurants (list)
     """
-    # Step 1: Get restaurants from Amap
+    # Step 1: Get restaurants via poi_tools (with cache support)
     try:
-        restaurants = await amap_service.search_restaurants(city, keywords=cuisine or None, page_size=20)
+        if db is not None:
+            restaurants = await poi_search_restaurants(db, city, cuisine=cuisine, limit=20)
+        else:
+            from app.services.amap import amap_service
+            restaurants = await amap_service.search_restaurants(city, keywords=cuisine or None, page_size=20)
     except Exception as e:
-        logger.warning("Amap search_restaurants failed: %s", e)
+        logger.warning("Restaurant search failed: %s", e)
         restaurants = []
 
     if not restaurants:
-        return {
-            "response": f"抱歉，目前没有找到{city}的餐厅推荐。请换个关键词试试！",
-            "restaurants": [],
-            "city": city,
-        }
+        return RestaurantAgentResult(
+            response=f"抱歉，目前没有找到{city}的餐厅推荐。请换个关键词试试！",
+            restaurants=[],
+            city=city,
+        )
 
     # Step 2: Filter and rank via LLM
     rest_str = json.dumps(restaurants, ensure_ascii=False, indent=2)
@@ -97,11 +105,11 @@ async def recommend_restaurants(
         )
     except Exception as e:
         logger.warning("Restaurant ranking failed: %s", e)
-        return {
-            "response": f"以下是{city}的部分餐厅推荐，您可以进一步告诉我您的口味偏好来获取更精准的推荐。",
-            "restaurants": restaurants[:5],
-            "city": city,
-        }
+        return RestaurantAgentResult(
+            response=f"以下是{city}的部分餐厅推荐，您可以进一步告诉我您的口味偏好来获取更精准的推荐。",
+            restaurants=restaurants[:5],
+            city=city,
+        )
 
     # Build final result
     top_picks = ranking.get("top_picks", [])
@@ -127,11 +135,11 @@ async def recommend_restaurants(
                 "address": "",
             })
 
-    return {
-        "response": response_text,
-        "restaurants": enriched or restaurants[:5],
-        "city": city,
-    }
+    return RestaurantAgentResult(
+        response=response_text,
+        restaurants=enriched or restaurants[:5],
+        city=city,
+    )
 
 
 async def recommend_nearby(
@@ -140,7 +148,7 @@ async def recommend_nearby(
     user_message: str,
     radius: int = 1000,
     types: str | None = None,
-) -> dict[str, Any]:
+) -> RestaurantAgentResult:
     """Recommend restaurants near a specific location.
 
     Returns:
@@ -159,10 +167,10 @@ async def recommend_nearby(
         restaurants = []
 
     if not restaurants:
-        return {
-            "response": "附近没有找到餐厅，请扩大搜索范围试试！",
-            "restaurants": [],
-        }
+        return RestaurantAgentResult(
+            response="附近没有找到餐厅，请扩大搜索范围试试！",
+            restaurants=[],
+        )
 
     rest_str = json.dumps(restaurants, ensure_ascii=False, indent=2)
 
@@ -198,10 +206,10 @@ async def recommend_nearby(
         )
     except Exception as e:
         logger.warning("Nearby ranking failed: %s", e)
-        return {
-            "response": "以下是附近的部分餐厅推荐：",
-            "restaurants": restaurants[:5],
-        }
+        return RestaurantAgentResult(
+            response="以下是附近的部分餐厅推荐：",
+            restaurants=restaurants[:5],
+        )
 
     top_picks = ranking.get("top_picks", [])
     enriched = []
@@ -216,7 +224,7 @@ async def recommend_nearby(
             "address": "", "distance": "",
         })
 
-    return {
-        "response": ranking.get("response", "以下是为您推荐的附近餐厅："),
-        "restaurants": enriched or restaurants[:5],
-    }
+    return RestaurantAgentResult(
+        response=ranking.get("response", "以下是为您推荐的附近餐厅："),
+        restaurants=enriched or restaurants[:5],
+    )

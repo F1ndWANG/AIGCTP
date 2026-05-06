@@ -39,6 +39,8 @@ class Product(Base):
     tags = Column(JSON, default=list)
     rating = Column(Float, default=0.0)
     status = Column(String(20), default="active", index=True)
+    source = Column(String(30), default="seed", index=True)
+    source_session_id = Column(String(100), nullable=True, index=True)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 

@@ -10,8 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.services.llm import llm_service
-from app.models.commerce import Product, Cart, CartItem, Order
+from app.models.commerce import Category, Product, Cart, CartItem, Order
 from app.core.logging import get_logger
+from app.agents.domain_results import (
+    CartAgentResult,
+    CommerceRecommendationResult,
+    ReorderAgentResult,
+)
 
 logger = get_logger(__name__)
 
@@ -31,11 +36,92 @@ COMMERCE_SYSTEM_PROMPT = """你是 AI 生活推荐系统的电商购物专家。
 """
 
 
+async def _get_ai_category_id(db: AsyncSession) -> int | None:
+    result = await db.execute(select(Category).where(Category.name == "AI 推荐"))
+    category = result.scalar_one_or_none()
+    if not category:
+        category = Category(
+            name="AI 推荐",
+            description="由 AI 对话生成的个性化商品",
+            icon="✨",
+            sort_order=99,
+        )
+        db.add(category)
+        await db.flush()
+    return category.id
+
+
+def _keyword_text(keywords: list[str] | None, fallback: str) -> str:
+    terms = [str(k).strip() for k in (keywords or []) if str(k).strip()]
+    return "、".join(terms) if terms else fallback[:20] or "生活好物"
+
+
+async def _create_ai_products(
+    user_message: str,
+    keywords: list[str] | None,
+    db: AsyncSession,
+    session_id: str | None = None,
+    count: int = 3,
+) -> list[Product]:
+    """Create practical catalog products when the database has no match."""
+    category_id = await _get_ai_category_id(db)
+    topic = _keyword_text(keywords, user_message)
+    templates = [
+        ("精选套装", 79.0, "适合当前需求的一站式组合，兼顾实用性和性价比。"),
+        ("便携款", 49.9, "轻便易携带，适合旅行、通勤或临时补充。"),
+        ("高品质升级款", 129.0, "更强调体验和耐用度，适合希望一步到位的用户。"),
+    ]
+    created: list[Product] = []
+    session_tag = f" #{session_id[-4:]}" if session_id else ""
+    for suffix, price, desc in templates[:count]:
+        name = f"{topic}{suffix}{session_tag}"
+        result = await db.execute(select(Product).where(Product.name == name))
+        product = result.scalar_one_or_none()
+        if not product:
+            product = Product(
+                name=name,
+                description=desc,
+                price=price,
+                original_price=None,
+                category_id=category_id,
+                image_urls=[],
+                stock=99,
+                unit="件",
+                specs=[],
+                tags=["AI推荐", "对话生成", *([topic] if topic else [])],
+                rating=4.5,
+                status="active",
+                source="ai_generated",
+                source_session_id=session_id,
+            )
+            db.add(product)
+            await db.flush()
+        created.append(product)
+    return created
+
+
+def _format_product(product: Product) -> dict[str, Any]:
+    return {
+        "id": product.id,
+        "name": product.name,
+        "price": product.price,
+        "original_price": product.original_price,
+        "description": (product.description or "")[:200],
+        "image_urls": product.image_urls or [],
+        "unit": product.unit,
+        "rating": product.rating,
+        "tags": product.tags or [],
+        "stock": product.stock,
+        "source": product.source or "seed",
+    }
+
+
 async def commerce_recommend(
     user_message: str,
     user_id: int,
     db: AsyncSession,
-) -> dict[str, Any]:
+    session_id: str | None = None,
+) -> CommerceRecommendationResult:
     """Search and recommend products based on user query.
 
     Returns:
@@ -108,6 +194,11 @@ async def commerce_recommend(
             products = list(broad_result.scalars().all())
 
     if not products:
+        generated = await _create_ai_products(user_message, keywords, db, session_id=session_id)
+        await db.commit()
+        products = generated
+
+    if not products:
         # LLM fallback: use model knowledge to suggest products
         fallback_prompt = f"""用户想购买: 「{' '.join(keywords)}」
 在我们的数据库中找不到匹配的商品。请根据你的知识给用户一些购买建议。
@@ -130,7 +221,7 @@ async def commerce_recommend(
                 resp += "\n\n💡 试试搜索: " + "、".join(suggested)
         except Exception:
             resp = f"抱歉，我没有找到符合「{' '.join(keywords)}」的商品。请试试其他关键词，或者告诉我您具体想买什么类型的商品？"
-        return {"response": resp, "products": []}
+        return CommerceRecommendationResult(response=resp, products=[])
 
     # Format products for LLM ranking
     products_str = json.dumps(
@@ -179,21 +270,10 @@ async def commerce_recommend(
     recommended_ids = ranking.get("recommended_ids", [p.id for p in products[:3]])
     recommended = [p for p in products if p.id in recommended_ids][:5]
 
-    return {
-        "response": ranking.get("response", f"为您推荐了 {len(recommended)} 件商品！"),
-        "products": [{
-            "id": p.id,
-            "name": p.name,
-            "price": p.price,
-            "original_price": p.original_price,
-            "description": p.description[:200],
-            "image_urls": p.image_urls,
-            "unit": p.unit,
-            "rating": p.rating,
-            "tags": p.tags,
-            "stock": p.stock,
-        } for p in recommended],
-    }
+    return CommerceRecommendationResult(
+        response=ranking.get("response", f"为您推荐了 {len(recommended)} 件商品！"),
+        products=[_format_product(p) for p in recommended],
+    )
 
 
 async def auto_cart(
@@ -201,7 +281,7 @@ async def auto_cart(
     user_id: int,
     context: dict,
     db: AsyncSession,
-) -> dict[str, Any]:
+) -> CartAgentResult:
     """Auto-generate shopping list and add items to cart.
 
     Returns:
@@ -235,6 +315,8 @@ async def auto_cart(
         }
 
     wanted_items = parsed.get("items", [])
+    if not wanted_items:
+        wanted_items = [{"product_name": user_message[:50], "quantity": 1, "specs": {}}]
     response_text = parsed.get("response", "已为您处理购物请求！")
     added_items = []
 
@@ -276,6 +358,15 @@ async def auto_cart(
                 ).limit(1)
             )
             product = result.scalar_one_or_none()
+        if not product:
+            generated = await _create_ai_products(
+                user_message=name_kw,
+                keywords=[name_kw],
+                db=db,
+                session_id=context.get("session_id"),
+                count=1,
+            )
+            product = generated[0] if generated else None
         if not product or product.stock < 1:
             continue
 
@@ -290,13 +381,15 @@ async def auto_cart(
             cart = Cart(user_id=user_id)
             db.add(cart)
             await db.flush()
-            cart.items = []
+            cart_items = []
+        else:
+            cart_items = list(cart.items)
 
         # Check if same product+specs already in cart
         import json as _json
         spec_str = _json.dumps(specs, sort_keys=True, ensure_ascii=False)
         existing = None
-        for ci in cart.items:
+        for ci in cart_items:
             if ci.product_id == product.id and _json.dumps(ci.specs or {}, sort_keys=True, ensure_ascii=False) == spec_str:
                 existing = ci
                 break
@@ -306,9 +399,7 @@ async def auto_cart(
         else:
             ci = CartItem(cart_id=cart.id, product_id=product.id, quantity=qty, specs=specs)
             db.add(ci)
-
-        # Decrement stock
-        product.stock = max(0, product.stock - qty)
+            cart_items.append(ci)
 
         added_items.append({
             "product_id": product.id,
@@ -321,21 +412,18 @@ async def auto_cart(
     await db.commit()
 
     if not added_items:
-        return {
-            "response": "抱歉，我没有找到匹配的商品或库存不足。请告诉我更具体的商品名称？",
-            "cart_items": [],
-        }
+        return CartAgentResult(
+            response="抱歉，我没有找到匹配的商品或库存不足。请告诉我更具体的商品名称？",
+            cart_items=[],
+        )
 
-    return {
-        "response": response_text,
-        "cart_items": added_items,
-    }
+    return CartAgentResult(response=response_text, cart_items=added_items)
 
 
 async def quick_reorder(
     user_id: int,
     db: AsyncSession,
-) -> dict[str, Any]:
+) -> ReorderAgentResult:
     """One-click reorder: add all items from most recent completed order to cart.
 
     Returns:
@@ -350,7 +438,11 @@ async def quick_reorder(
     order = result.scalar_one_or_none()
 
     if not order:
-        return {"response": "您还没有历史订单，无法复购。去看看有什么想买的吧！", "order_id": 0, "items_added": 0}
+        return ReorderAgentResult(
+            response="您还没有历史订单，无法复购。去看看有什么想买的吧！",
+            order_id=0,
+            items_added=0,
+        )
 
     from sqlalchemy.orm import selectinload
     import json as _json
@@ -364,7 +456,9 @@ async def quick_reorder(
         cart = Cart(user_id=user_id)
         db.add(cart)
         await db.flush()
-        cart.items = []
+        cart_items = []
+    else:
+        cart_items = list(cart.items)
 
     order_items = order.items or []
     added_count = 0
@@ -389,7 +483,7 @@ async def quick_reorder(
 
         spec_str = _json.dumps(specs, sort_keys=True, ensure_ascii=False)
         existing = None
-        for ci in cart.items:
+        for ci in cart_items:
             if ci.product_id == pid and _json.dumps(ci.specs or {}, sort_keys=True, ensure_ascii=False) == spec_str:
                 existing = ci
                 break
@@ -399,14 +493,14 @@ async def quick_reorder(
         else:
             ci = CartItem(cart_id=cart.id, product_id=pid, quantity=qty, specs=specs)
             db.add(ci)
+            cart_items.append(ci)
 
-        product.stock = max(0, product.stock - qty)
         added_count += 1
 
     await db.commit()
 
-    return {
-        "response": f"已为您将订单 #{order.id} 中的 {added_count} 件商品重新加入购物车！",
-        "order_id": order.id,
-        "items_added": added_count,
-    }
+    return ReorderAgentResult(
+        response=f"已为您将订单 #{order.id} 中的 {added_count} 件商品重新加入购物车！",
+        order_id=order.id,
+        items_added=added_count,
+    )

@@ -39,6 +39,8 @@ class ProductRequest(BaseModel):
     tags: list[str] = []
     rating: float = 0.0
     status: str = "active"
+    source: str = "seed"
+    source_session_id: Optional[str] = None
 
 
 class ProductResponse(BaseModel):
@@ -55,6 +57,8 @@ class ProductResponse(BaseModel):
     tags: list[str] = []
     rating: float = 0.0
     status: str = "active"
+    source: str = "seed"
+    source_session_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -71,6 +75,7 @@ class ProductListItem(BaseModel):
     unit: str = "件"
     rating: float = 0.0
     status: str = "active"
+    source: str = "seed"
 
     model_config = {"from_attributes": True}
 

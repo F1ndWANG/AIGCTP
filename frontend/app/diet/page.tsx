@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/Layout/AuthProvider";
 import { useToast } from "@/components/UI/Toast";
 import { diet as dietApi } from "@/lib/api";
+import { chatHref } from "@/lib/session";
 import MealLogCard from "@/components/Diet/MealLogCard";
 import HealthProfileForm from "@/components/Diet/HealthProfileForm";
 import DietPlanCard from "@/components/Diet/DietPlanCard";
@@ -169,7 +170,7 @@ export default function DietPage() {
   const handleAddMeal = async () => {
     if (!newFoodInput.trim()) return;
     const foods = newFoodInput
-      .split(/[,，、]/)
+      .split(/[,，、\n]/)
       .map((s) => s.trim())
       .filter(Boolean);
     try {
@@ -236,23 +237,23 @@ export default function DietPage() {
   ];
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
-      <header className="bg-white border-b px-4 py-3">
+    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-slate-900">
+      <header className="bg-white dark:bg-slate-800 border-b dark:border-slate-700 px-4 py-3">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h1 className="font-bold text-lg">饮食健康</h1>
             <button
-              onClick={() => router.push("/chat")}
-              className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-full hover:bg-gray-200 transition"
+              onClick={() => router.push(chatHref())}
+              className="text-xs px-3 py-1.5 bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-slate-600 transition"
             >
               返回对话
             </button>
           </div>
-          <span className="text-sm text-gray-500">{user.display_name}</span>
+          <span className="text-sm text-gray-500 dark:text-gray-400">{user.display_name}</span>
         </div>
       </header>
 
-      <div className="bg-white border-b">
+      <div className="bg-white dark:bg-slate-800 border-b dark:border-slate-700">
         <div className="max-w-4xl mx-auto flex">
           {tabs.map((tab) => (
             <button
@@ -264,7 +265,7 @@ export default function DietPage() {
               className={`px-5 py-3 text-sm font-medium border-b-2 transition ${
                 activeTab === tab.key
                   ? "text-green-600 border-green-600"
-                  : "text-gray-500 border-transparent hover:text-gray-700"
+                  : "text-gray-500 dark:text-gray-400 border-transparent hover:text-gray-700 dark:hover:text-gray-300"
               }`}
             >
               {tab.label}
@@ -310,7 +311,7 @@ export default function DietPage() {
                   onChange={(e) => setNewFoodInput(e.target.value)}
                   className="w-full border rounded-lg px-3 py-2 text-sm resize-none"
                   rows={2}
-                  placeholder="输入食物名称，用逗号分隔，例如：米饭, 鸡胸肉, 青菜"
+                  placeholder="输入食物名称（用逗号或换行分隔），例如：米饭, 鸡胸肉, 青菜"
                 />
                 <div className="flex gap-2">
                   <button
@@ -331,7 +332,7 @@ export default function DietPage() {
 
             {meals.length === 0 ? (
               <div className="text-center py-12">
-                <p className="text-gray-400 text-sm">暂无饮食记录</p>
+                <p className="text-gray-400 dark:text-gray-500 text-sm">暂无饮食记录</p>
                 <p className="text-gray-300 text-xs mt-1">
                   点击“添加记录”开始记录今天的饮食
                 </p>
@@ -370,7 +371,7 @@ export default function DietPage() {
               </div>
             ) : dietPlans.length === 0 ? (
               <div className="text-center py-12">
-                <p className="text-gray-400 text-sm">暂无饮食计划</p>
+                <p className="text-gray-400 dark:text-gray-500 text-sm">暂无饮食计划</p>
                 <p className="text-gray-300 text-xs mt-1">
                   在对话中告诉 AI “帮我做一周的减肥饮食计划” 来生成计划
                 </p>
@@ -378,7 +379,7 @@ export default function DietPage() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {dietPlans.map((plan) => (
-                  <div key={plan.id} className="text-left p-4 border rounded-xl bg-white hover:shadow-md transition">
+                  <div key={plan.id} className="text-left p-4 border dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 hover:shadow-md transition">
                     <button
                       onClick={async () => {
                         try {
@@ -392,17 +393,17 @@ export default function DietPage() {
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <h3 className="font-medium text-gray-900">
+                          <h3 className="font-medium text-gray-900 dark:text-gray-100">
                             {plan.title || "饮食计划"}
                           </h3>
-                          <p className="text-sm text-gray-400 mt-1">
+                          <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
                             {plan.duration_days}天 · {plan.status === "draft" ? "草稿" : plan.status === "active" ? "进行中" : "已完成"}
                           </p>
                         </div>
                         <span className={`text-xs px-2 py-0.5 rounded-full ${
                           plan.status === "active"
                             ? "bg-green-100 text-green-700"
-                            : "bg-gray-100 text-gray-600"
+                            : "bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300"
                         }`}>
                           {plan.status === "active" ? "进行中" : "草稿"}
                         </span>

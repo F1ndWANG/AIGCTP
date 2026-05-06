@@ -13,6 +13,7 @@ import type {
   DietPlan,
   DietPlanListItem,
   RestaurantRecommendation,
+  SavedRestaurantRecommendation,
   ProductListItem,
   Product,
   Category,
@@ -26,6 +27,18 @@ import type {
 const API_BASE = "/api";
 
 let token: string | null = null;
+
+export class ApiError extends Error {
+  status: number;
+  detail: unknown;
+
+  constructor(message: string, status: number, detail: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.detail = detail;
+  }
+}
 
 export function setToken(t: string | null) {
   token = t;
@@ -56,7 +69,7 @@ async function request<T>(
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({ detail: resp.statusText }));
-    throw new Error(err.detail || "Request failed");
+    throw new ApiError(err.detail || "Request failed", resp.status, err);
   }
   return resp.json();
 }
@@ -89,6 +102,10 @@ export const chat = {
       onToken: (token: string) => void;
       onResult: (text: string) => void;
       onPlan: (plan: Record<string, unknown>) => void;
+      onProducts?: (products: ProductListItem[]) => void;
+      onRestaurants?: (recommendation: SavedRestaurantRecommendation) => void;
+      onDietPlan?: (plan: Record<string, unknown>) => void;
+      onCartItems?: (items: Array<Record<string, unknown>>) => void;
       onDone: () => void;
       onError: (err: Error) => void;
       onThinking?: (text: string) => void;
@@ -97,6 +114,14 @@ export const chat = {
     travel_plan_id?: number,
   ): AbortController => {
     const controller = new AbortController();
+    let doneCalled = false;
+
+    const finish = () => {
+      if (!doneCalled) {
+        doneCalled = true;
+        callbacks.onDone();
+      }
+    };
 
     fetch(`${API_BASE}/chat/stream`, {
       method: "POST",
@@ -141,8 +166,23 @@ export const chat = {
                   case "plan":
                     callbacks.onPlan(data.content);
                     break;
+                  case "products":
+                    callbacks.onProducts?.(data.content);
+                    break;
+                  case "restaurants":
+                    callbacks.onRestaurants?.(data.content);
+                    break;
+                  case "diet_plan":
+                    callbacks.onDietPlan?.(data.content);
+                    break;
+                  case "cart_items":
+                    callbacks.onCartItems?.(data.content);
+                    break;
                   case "done":
-                    callbacks.onDone();
+                    finish();
+                    break;
+                  case "error":
+                    callbacks.onError(new Error(data.content));
                     break;
                   case "thinking":
                     callbacks.onThinking?.(data.content);
@@ -154,10 +194,14 @@ export const chat = {
             }
           }
         }
+
+        finish();
       })
       .catch((err) => {
-        if (err.name !== "AbortError") {
-          callbacks.onError(err);
+        if (err.name === "AbortError") {
+          finish();
+        } else {
+          callbacks.onError(err as Error);
         }
       });
 
@@ -177,6 +221,10 @@ export const chat = {
 export const travel = {
   list: () => request<TravelPlanListItem[]>("/travel/plans"),
   get: (id: number) => request<TravelPlanResponse>(`/travel/plans/${id}`),
+  confirm: (id: number) =>
+    request<TravelPlanResponse>(`/travel/plans/${id}/confirm`, {
+      method: "POST",
+    }),
   delete: (id: number) =>
     fetch(`${API_BASE}/travel/plans/${id}`, {
       method: "DELETE",
@@ -247,15 +295,31 @@ export const diet = {
 
 // Restaurant
 export const restaurant = {
-  recommend: (city: string, cuisine?: string) =>
+  recommend: (city: string, cuisine?: string, session_id?: string) =>
     request<RestaurantRecommendation>("/restaurant/recommend", {
       method: "POST",
-      body: JSON.stringify({ city, cuisine }),
+      body: JSON.stringify({ city, cuisine, session_id }),
     }),
-  nearby: (lat: number, lng: number, radius?: number) =>
+  nearby: (lat: number, lng: number, radius?: number, session_id?: string) =>
     request<RestaurantRecommendation>("/restaurant/nearby", {
       method: "POST",
-      body: JSON.stringify({ lat, lng, radius }),
+      body: JSON.stringify({ lat, lng, radius, session_id }),
+    }),
+  listRecommendations: (session_id?: string) =>
+    request<SavedRestaurantRecommendation[]>(
+      `/restaurant/recommendations${session_id ? `?session_id=${encodeURIComponent(session_id)}` : ""}`
+    ),
+  getRecommendation: (id: number) =>
+    request<SavedRestaurantRecommendation>(`/restaurant/recommendations/${id}`),
+  selectRecommendation: (id: number, restaurant: Record<string, unknown>) =>
+    request<SavedRestaurantRecommendation>(`/restaurant/recommendations/${id}/select`, {
+      method: "POST",
+      body: JSON.stringify({ restaurant }),
+    }),
+  deleteRecommendation: (id: number) =>
+    fetch(`${API_BASE}/restaurant/recommendations/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${getToken()}` },
     }),
 };
 

@@ -2,6 +2,10 @@ from datetime import datetime, date
 from typing import Optional, Any
 from pydantic import BaseModel
 
+from app.schemas.commerce import CartItemResponse, ProductListItem
+from app.schemas.diet import DietPlanResponse
+from app.schemas.restaurant import RestaurantRecommendationResponse
+
 
 class TravelPlanRequest(BaseModel):
     destination: str
@@ -75,3 +79,10 @@ class ChatResponse(BaseModel):
     session_id: str
     message: str
     travel_plan: Optional[TravelPlanResponse] = None
+    products: list[ProductListItem] = []
+    restaurants: list[dict[str, Any]] = []
+    restaurant_recommendation_id: Optional[int] = None
+    restaurant_recommendation: Optional[RestaurantRecommendationResponse] = None
+    diet_plan: Optional[dict[str, Any]] = None
+    cart_items: list[dict[str, Any]] = []
+    artifacts: dict[str, Any] = {}

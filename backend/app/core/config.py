@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # LLM (DeepSeek, OpenAI-compatible)
     LLM_API_KEY: Optional[str] = None
     LLM_API_BASE: str = "https://api.deepseek.com"
-    LLM_MODEL: str = "deepseek-v4-flash"
+    LLM_MODEL: str = "deepseek-v4-pro"
 
     # Amap (高德地图)
     AMAP_API_KEY: Optional[str] = None

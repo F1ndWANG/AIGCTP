@@ -15,6 +15,7 @@ export default function CartView({ onNavigateChat }: CartViewProps) {
   const { toast } = useToast();
   const [cart, setCart] = useState<Cart | null>(null);
   const [cartLoading, setCartLoading] = useState(false);
+  const [cartError, setCartError] = useState<string | null>(null);
   const [showCheckout, setShowCheckout] = useState(false);
   const [shippingAddress, setShippingAddress] = useState("");
   const [contactPhone, setContactPhone] = useState("");
@@ -25,7 +26,8 @@ export default function CartView({ onNavigateChat }: CartViewProps) {
     try {
       const data = await api.getCart();
       setCart(data);
-    } catch { /* ignore */ }
+      setCartError(null);
+    } catch { setCartError("加载购物车失败，请重试"); }
     setCartLoading(false);
   }, []);
 
@@ -75,6 +77,21 @@ export default function CartView({ onNavigateChat }: CartViewProps) {
     } catch { toast("下单失败，请重试", "error"); }
   };
 
+  if (cartError && !cartLoading) {
+    return (
+      <div className="text-center py-16">
+        <p className="text-gray-300 text-5xl mb-4">⚠️</p>
+        <p className="text-gray-400 dark:text-gray-500 text-sm mb-2">{cartError}</p>
+        <button
+          onClick={() => { setCartError(null); loadCart(); }}
+          className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+        >
+          重试
+        </button>
+      </div>
+    );
+  }
+
   if (cartLoading && !cart) {
     return <CartSkeleton />;
   }
@@ -85,7 +102,7 @@ export default function CartView({ onNavigateChat }: CartViewProps) {
     return (
       <div className="text-center py-16">
         <p className="text-gray-300 text-5xl mb-4">🛒</p>
-        <p className="text-gray-400 text-sm">购物车是空的</p>
+        <p className="text-gray-400 dark:text-gray-500 text-sm">购物车是空的</p>
         <p className="text-gray-300 text-xs mt-1">去聊天窗口让 AI 帮你推荐商品吧！</p>
         <button
           onClick={onNavigateChat}
@@ -100,7 +117,7 @@ export default function CartView({ onNavigateChat }: CartViewProps) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-gray-500">共 {items.length} 件商品</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">共 {items.length} 件商品</p>
         <button onClick={handleClearCart} className="text-xs text-red-400 hover:text-red-600">
           清空购物车
         </button>
@@ -118,9 +135,9 @@ export default function CartView({ onNavigateChat }: CartViewProps) {
       </div>
 
       {/* Total & Checkout */}
-      <div className="mt-6 bg-white rounded-lg border p-4">
+      <div className="mt-6 bg-white dark:bg-slate-800 rounded-lg border dark:border-slate-700 p-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm text-gray-500">合计</span>
+          <span className="text-sm text-gray-500 dark:text-gray-400">合计</span>
           <span className="text-xl font-bold text-red-600">¥{cart?.total_amount.toFixed(2)}</span>
         </div>
 
@@ -157,7 +174,7 @@ export default function CartView({ onNavigateChat }: CartViewProps) {
             <div className="flex gap-2">
               <button
                 onClick={() => setShowCheckout(false)}
-                className="flex-1 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="flex-1 py-2 text-sm border border-gray-300 dark:border-slate-700 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700"
               >
                 取消
               </button>

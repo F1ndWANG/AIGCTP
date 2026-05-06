@@ -48,6 +48,13 @@ export interface ChatResponse {
   session_id: string;
   message: string;
   travel_plan?: TravelPlanResponse;
+  products?: ProductListItem[];
+  restaurants?: Restaurant[];
+  restaurant_recommendation_id?: number;
+  restaurant_recommendation?: SavedRestaurantRecommendation;
+  diet_plan?: Record<string, unknown>;
+  cart_items?: Array<Record<string, unknown>>;
+  artifacts?: Record<string, unknown>;
 }
 
 // ===== Travel Plan =====
@@ -81,6 +88,12 @@ export interface TravelPlanItineraryDay {
     price: number;
     reason: string;
   }>;
+  hotel?: {
+    name: string;
+    price_level?: string;
+    reason?: string;
+    tips?: string;
+  };
   transport_tips?: string;
 }
 
@@ -147,12 +160,6 @@ export interface RouteResponse {
   origin_lng: number;
   destination_lat: number;
   destination_lng: number;
-}
-
-// ===== SSE Streaming Events =====
-export interface SSEEvent {
-  type: "token" | "plan" | "done" | "error";
-  content: unknown;
 }
 
 // ===== Diet & Health =====
@@ -254,6 +261,19 @@ export interface RestaurantRecommendation {
   response: string;
   restaurants: Restaurant[];
   city?: string;
+  recommendation_id?: number;
+}
+
+export interface SavedRestaurantRecommendation {
+  id: number;
+  session_id?: string;
+  city: string;
+  query: string;
+  response: string;
+  restaurants: Restaurant[];
+  selected_restaurant?: Restaurant;
+  created_at: string;
+  updated_at: string;
 }
 
 // ===== Commerce =====
@@ -277,6 +297,7 @@ export interface ProductListItem {
   unit: string;
   rating: number;
   status: string;
+  source?: string;
 }
 
 export interface Product {

@@ -8,6 +8,7 @@ class TestRestaurantRecommend:
             "city": "成都",
             "cuisine": "川菜",
             "dietary_restrictions": ["不吃辣"],
+            "session_id": "restaurant-api-session",
         })
         assert resp.status_code == 200
         data = resp.json()
@@ -15,6 +16,14 @@ class TestRestaurantRecommend:
         assert data["city"] == "成都"
         # Mock returns restaurant data
         assert "restaurants" in data
+        assert "recommendation_id" in data
+
+        saved = await client.get(
+            "/api/v1/restaurant/recommendations?session_id=restaurant-api-session",
+            headers=auth_headers,
+        )
+        assert saved.status_code == 200
+        assert len(saved.json()) == 1
 
     async def test_recommend_without_cuisine(self, client, auth_headers):
         resp = await client.post("/api/v1/restaurant/recommend", headers=auth_headers, json={
@@ -29,6 +38,22 @@ class TestRestaurantRecommend:
             "city": "成都",
         })
         assert resp.status_code == 401
+
+    async def test_select_recommendation_restaurant(self, client, auth_headers):
+        resp = await client.post("/api/v1/restaurant/recommend", headers=auth_headers, json={
+            "city": "北京",
+            "session_id": "select-session",
+        })
+        recommendation_id = resp.json()["recommendation_id"]
+        restaurant = resp.json()["restaurants"][0]
+
+        selected = await client.post(
+            f"/api/v1/restaurant/recommendations/{recommendation_id}/select",
+            headers=auth_headers,
+            json={"restaurant": restaurant},
+        )
+        assert selected.status_code == 200
+        assert selected.json()["selected_restaurant"]["name"] == restaurant["name"]
 
 
 class TestRestaurantNearby:

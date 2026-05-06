@@ -4,14 +4,20 @@ import { createContext, useContext, useState, useCallback, ReactNode } from "rea
 
 type ToastVariant = "success" | "error" | "info" | "warning";
 
+interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 interface Toast {
   id: number;
   message: string;
   variant: ToastVariant;
+  action?: ToastAction;
 }
 
 interface ToastContextType {
-  toast: (message: string, variant?: ToastVariant) => void;
+  toast: (message: string, variant?: ToastVariant, action?: ToastAction) => void;
 }
 
 const ToastContext = createContext<ToastContextType>({ toast: () => {} });
@@ -28,9 +34,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addToast = useCallback(
-    (message: string, variant: ToastVariant = "info") => {
+    (message: string, variant: ToastVariant = "info", action?: ToastAction) => {
       const id = nextId++;
-      setToasts((prev) => [...prev, { id, message, variant }]);
+      setToasts((prev) => [...prev, { id, message, variant, action }]);
       setTimeout(() => removeToast(id), 4000);
     },
     [removeToast]
@@ -48,14 +54,29 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div className="fixed z-50 flex flex-col gap-2 pointer-events-none
                       top-4 inset-x-2 sm:inset-x-auto sm:right-4 sm:left-auto
-                      items-stretch sm:items-end">
+                      items-stretch sm:items-end"
+        role="alert" aria-live="polite"
+      >
         {toasts.map((t) => (
           <div
             key={t.id}
-            className={`pointer-events-auto px-4 py-3 rounded-lg shadow-lg text-sm font-medium animate-slide-in ${variantStyles[t.variant]}`}
-            onClick={() => removeToast(t.id)}
+            className={`pointer-events-auto px-4 py-3 rounded-lg shadow-lg text-sm font-medium animate-slide-in flex items-center gap-3 ${variantStyles[t.variant]}`}
           >
-            {t.message}
+            <span className="flex-1">{t.message}</span>
+            {t.action && (
+              <button
+                onClick={() => { t.action!.onClick(); removeToast(t.id); }}
+                className="font-bold text-xs underline whitespace-nowrap hover:opacity-80"
+              >
+                {t.action.label}
+              </button>
+            )}
+            <button
+              onClick={() => removeToast(t.id)}
+              className="text-white/60 hover:text-white ml-1"
+            >
+              ✕
+            </button>
           </div>
         ))}
       </div>

@@ -13,9 +13,11 @@ interface RestaurantListProps {
   city?: string;
   title?: string;
   onNavigate?: (name: string) => void;
+  onSelect?: (restaurant: Restaurant) => void;
+  selectedName?: string;
 }
 
-export default function RestaurantList({ restaurants, city, title }: RestaurantListProps) {
+export default function RestaurantList({ restaurants, city, title, onSelect, selectedName }: RestaurantListProps) {
   const [selectedPoi, setSelectedPoi] = useState<string | null>(null);
   const [showMap, setShowMap] = useState(false);
 
@@ -33,14 +35,14 @@ export default function RestaurantList({ restaurants, city, title }: RestaurantL
   return (
     <div>
       {title && (
-        <h3 className="text-sm font-medium text-gray-500 mb-3">{title}</h3>
+        <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">{title}</h3>
       )}
 
       {/* Map toggle */}
       {mapMarkers.length > 1 && (
         <button
           onClick={() => setShowMap(!showMap)}
-          className="mb-3 px-3 py-1.5 text-xs bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition"
+          className="mb-3 px-3 py-1.5 text-xs bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-600 transition"
         >
           {showMap ? "隐藏地图" : "在地图上查看"}
         </button>
@@ -58,6 +60,8 @@ export default function RestaurantList({ restaurants, city, title }: RestaurantL
             key={i}
             restaurant={r}
             onNavigate={(name) => setSelectedPoi(name)}
+            onSelect={onSelect}
+            selected={selectedName === r.name}
           />
         ))}
       </div>

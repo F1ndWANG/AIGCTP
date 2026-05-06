@@ -1,11 +1,23 @@
 """Weather tools for Travel Agent"""
 import datetime
-import random
+import hashlib
 
 from app.services.weather import qweather_service
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def _deterministic_int(seed: str, min_val: int, max_val: int) -> int:
+    """Generate a deterministic integer from a seed string."""
+    h = hashlib.md5(seed.encode()).hexdigest()
+    return min_val + (int(h[:8], 16) % (max_val - min_val + 1))
+
+
+def _deterministic_choice(seed: str, choices: list[str]) -> str:
+    """Generate a deterministic choice from a seed string."""
+    h = hashlib.md5(seed.encode()).hexdigest()
+    return choices[int(h[:8], 16) % len(choices)]
 
 
 def _fallback_forecast(city: str, days: int = 3) -> list[dict]:
@@ -30,19 +42,20 @@ def _fallback_forecast(city: str, days: int = 3) -> list[dict]:
     for i in range(days):
         day = today + datetime.timedelta(days=i)
         cond = conditions_pool[i % len(conditions_pool)]
-        temp_min = random.randint(base_min, base_min + 5)
-        temp_max = random.randint(base_max - 5, base_max)
+        day_seed = f"{city}:{i}"
+        temp_min = _deterministic_int(f"{day_seed}:min", base_min, base_min + 5)
+        temp_max = _deterministic_int(f"{day_seed}:max", base_max - 5, base_max)
         results.append({
             "date": day.isoformat(),
             "temp_max": str(temp_max),
             "temp_min": str(temp_min),
             "condition": cond,
             "condition_night": cond,
-            "wind_dir": random.choice(["东南风", "西南风", "东北风", "西北风"]),
-            "wind_scale": str(random.randint(1, 4)),
-            "humidity": str(random.randint(45, 85)),
-            "precipitation": str(random.randint(0, 30)),
-            "uv_index": str(random.randint(1, 5)),
+            "wind_dir": _deterministic_choice(f"{day_seed}:wind", ["东南风", "西南风", "东北风", "西北风"]),
+            "wind_scale": str(_deterministic_int(f"{day_seed}:scale", 1, 4)),
+            "humidity": str(_deterministic_int(f"{day_seed}:humidity", 45, 85)),
+            "precipitation": str(_deterministic_int(f"{day_seed}:precip", 0, 30)),
+            "uv_index": str(_deterministic_int(f"{day_seed}:uv", 1, 5)),
         })
     return results
 
