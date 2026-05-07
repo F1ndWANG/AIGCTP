@@ -1,257 +1,251 @@
-# AIGCTP - AI 生活推荐与规划系统
+# AIGCTP: AI Life Recommendation and Planning Platform
 
-AIGCTP 是一个面向日常生活场景的 AI 多智能体推荐与执行系统。项目不是单纯的聊天机器人，而是把自然语言对话作为统一入口，将用户需求分发到行程规划、餐厅推荐、饮食健康、商品推荐、购物车和订单等业务模块，并把 AI 生成结果沉淀为可查询、可恢复、可继续操作的结构化数据。
+<p align="center">
+  <img src="frontend/public/brand-banner.svg" width="420" alt="AIGCTP project icon">
+</p>
 
-## 项目定位
+<p align="center">
+  <a href="https://github.com/F1ndWANG/AIGCTP"><img src="https://img.shields.io/badge/repo-GitHub-black?logo=github" alt="GitHub Repo"></a>
+  <img src="https://img.shields.io/badge/frontend-Next.js%2014-000000?logo=nextdotjs" alt="Next.js 14">
+  <img src="https://img.shields.io/badge/backend-FastAPI-009688?logo=fastapi" alt="FastAPI">
+  <img src="https://img.shields.io/badge/language-TypeScript%20%7C%20Python-blue" alt="TypeScript and Python">
+  <img src="https://img.shields.io/badge/database-PostgreSQL%20%7C%20SQLite-336791?logo=postgresql" alt="Database">
+  <img src="https://img.shields.io/badge/cache-Redis-DC382D?logo=redis" alt="Redis">
+  <img src="https://img.shields.io/badge/AI-Multi--Agent-orange" alt="Multi-Agent">
+</p>
 
-现代生活决策往往跨越多个场景：出行需要规划路线和行程，吃饭需要结合地点、口味和健康偏好，购物需要搜索商品、加入购物车并形成订单。传统应用通常把这些能力拆散在多个垂直系统中，用户需要反复切换工具。
+<p align="center">
+  A full-stack, multi-agent life-service platform that turns natural-language requests into travel plans, restaurant recommendations, diet guidance, product discovery, cart actions, and persistent business artifacts.
+</p>
 
-AIGCTP 要解决的问题是：用一个统一的 AI 交互入口，理解用户的自然语言需求，并把推荐结果转化为可执行的系统能力。
+## Overview
 
-系统核心目标包括：
+AIGCTP is an AI-native recommendation and planning system for everyday life scenarios. It is designed around a simple product idea: users should be able to describe a real-world need once, and the system should route that request to the right domain workflow, preserve the result, and keep it actionable.
 
-- 用自然语言完成跨场景生活服务推荐。
-- 将 AI 回复从一次性文本升级为结构化业务结果。
-- 支持历史对话、历史行程、用户偏好和业务状态的持续沉淀。
-- 让推荐结果继续流转到购物车、订单、行程确认、反馈分析等后续动作。
-- 形成前后端分层清晰、可扩展、可观测、可继续演进的工程架构。
+Unlike a single-purpose chatbot, AIGCTP combines conversational AI with structured application modules. A user can ask for a weekend trip, request nearby restaurants, log meals, generate a diet plan, search products, add items to a cart, and return to previous conversations or saved artifacts later.
 
-## 能解决的问题
+The project is suitable for:
 
-- 用户不需要学习复杂表单，可以直接通过对话描述需求。
-- 多领域推荐能力统一在一个入口下，减少应用切换成本。
-- 行程、餐厅、饮食、商品等推荐结果可以保存和再次打开，不会只停留在聊天记录里。
-- 系统可以基于历史会话和上下文继续优化推荐，而不是每次从零开始。
-- 后端通过智能体编排、服务层和运行时记录，把 AI 调用变成可维护的业务流程。
-- 前端提供登录、会话恢复、结果卡片、历史面板和业务页面，使推荐结果可以被用户真正使用。
+- multi-agent systems coursework or research prototypes,
+- graduation projects and full-stack portfolio demonstrations,
+- AI application architecture studies,
+- and experiments that connect LLM reasoning with executable business workflows.
 
-## 核心功能
+## Highlights
 
-### 1. 用户与认证
+- Unified AI entry point for travel, restaurants, diet, commerce, and general conversation.
+- Hybrid intent routing with keyword fast paths, LLM semantic classification, clarification handling, and domain dispatch.
+- Agent-oriented backend with Supervisor, Dispatcher, Travel, Restaurant, Diet, Commerce, and Cross-Domain composition modules.
+- Persistent artifacts for travel plans, restaurant recommendations, diet plans, conversations, carts, orders, feedback, runtime tasks, and domain events.
+- Streaming chat support through Server-Sent Events, including progress messages and artifact events.
+- Production-oriented service boundaries for context building, conversation storage, artifact synchronization, preference learning, runtime tracking, LLM access, maps, and weather.
+- Full-stack user experience with authentication, restored sessions, result cards, business pages, feedback surfaces, and offline/PWA foundations.
 
-- 用户注册、登录和退出。
-- JWT 鉴权。
-- 当前用户信息读取。
-- 用户资料、密码和偏好配置维护。
-
-### 2. AI 对话与会话管理
-
-- 支持同步对话和 SSE 流式响应。
-- 根据用户输入识别意图并路由到不同业务智能体。
-- 支持历史对话列表、会话恢复和会话删除。
-- 支持上下文携带，例如当前行程、商品、餐厅、饮食计划和购物车状态。
-- 对失效会话进行自动清理，避免用户点击 AI 对话时持续恢复失败。
-
-### 3. 行程规划
-
-- 根据自然语言生成旅行计划。
-- 支持行程列表、详情查看、确认和历史恢复。
-- 支持基于用户追问继续调整行程。
-- 集成路线规划能力，为行程结果提供后续导航支撑。
-
-### 4. 餐厅推荐
-
-- 支持按城市和口味偏好推荐餐厅。
-- 支持附近餐厅查询。
-- 推荐结果可以进入对话上下文，后续继续追问或选择。
-
-### 5. 饮食健康
-
-- 健康档案管理。
-- 每日饮食记录。
-- 饮食汇总和营养分析。
-- AI 生成饮食计划并支持历史查看。
-
-### 6. 商品、购物车与订单
-
-- 商品分类、搜索、筛选和详情查看。
-- AI 辅助商品推荐。
-- 加入购物车、修改数量、删除商品和清空购物车。
-- 创建订单、订单列表、取消订单和再次下单。
-- 支持从对话中识别加购、复购等意图。
-
-### 7. 反馈与分析
-
-- 对推荐结果进行喜欢/不喜欢反馈。
-- 按内容类型统计反馈数据。
-- 提供汇总分析能力，用于后续优化推荐质量。
-
-### 8. 高可用运行时基础
-
-- 后端记录任务运行状态。
-- 支持领域事件记录。
-- 支持失败任务查询和重试接口。
-- 为后续接入队列、异步工作流、审计追踪和可观测系统打基础。
-
-## 整体架构
+## Architecture
 
 ```text
-用户
- |
- v
-Next.js 前端
- |
- |-- 登录 / 注册
- |-- AI 对话
- |-- 行程 / 餐厅 / 饮食 / 商品 / 购物车 / 订单页面
- |-- 历史会话、结果卡片、反馈与仪表盘
- |
- v
-FastAPI API 层
- |
- |-- Auth / Users
- |-- Chat / Runtime
- |-- Travel / Restaurant / Diet
- |-- Commerce / Feedback / Route
- |
- v
-应用服务层
- |
- |-- ChatOrchestrator        对话编排
- |-- ConversationService     会话持久化
- |-- ArtifactService         业务结果同步
- |-- ContextBuilder          上下文构建
- |-- RuntimeService          任务和事件记录
- |-- PreferenceLearner       用户偏好沉淀
- |
- v
-智能体层
- |
- |-- Supervisor              意图识别与调度
- |-- Dispatcher              统一派发
- |-- TravelAgent             行程规划
- |-- RestaurantAgent         餐厅推荐
- |-- DietAgent               饮食健康
- |-- CommerceAgent           商品、购物车、订单
- |-- CrossDomain             跨领域结果整合
- |
- v
-数据与外部能力
- |
- |-- SQLite / PostgreSQL     业务数据持久化
- |-- Redis                   缓存和限流基础
- |-- DeepSeek/OpenAI 兼容 API AI 推理
- |-- AMap                    地图与路线
- |-- QWeather                天气能力
+Next.js 14 Frontend
+  app/
+    chat, plans, travel, restaurants, diet, products, cart,
+    dashboard, profile, settings, offline
+  components/
+    Chat, Commerce, Diet, Home, Layout, Map, Restaurant, TravelPlan, UI
+        |
+        v
+FastAPI API Layer
+  auth, users, chat, travel, restaurant, diet, commerce,
+  feedback, route, runtime
+        |
+        v
+Application Services
+  ChatOrchestrator
+  ConversationService
+  ArtifactService
+  ContextBuilder
+  PreferenceLearner
+  RuntimeService
+  LLM / AMap / Weather clients
+        |
+        v
+Agent Layer
+  Supervisor -> Dispatcher
+    TravelAgent
+    RestaurantAgent
+    DietAgent
+    CommerceAgent
+    CrossDomainComposer
+        |
+        v
+Persistence and Infrastructure
+  PostgreSQL / SQLite
+  Redis
+  OpenAI-compatible LLM provider
+  AMap
+  QWeather
 ```
 
-## 后端架构说明
+## Core Capabilities
 
-后端采用 FastAPI + SQLAlchemy Async ORM，按 API 层、服务层、智能体层、模型层拆分。
+### Conversational AI
 
-- `api/`：提供 HTTP 接口，只负责请求校验、鉴权入口和响应组织。
-- `services/`：承载应用业务流程，例如对话编排、会话持久化、任务运行记录、业务结果同步。
-- `agents/`：承载 AI 领域智能体，包括意图分类、统一调度和领域处理。
-- `models/`：定义数据库 ORM 实体。
-- `schemas/`：定义 Pydantic 请求和响应模型。
-- `core/`：配置、数据库、安全、日志、Redis 等基础能力。
-- `middleware/`：限流等横切能力。
+- Synchronous chat endpoint and SSE streaming endpoint.
+- Conversation session creation, listing, restoration, and deletion.
+- Context-aware routing that can continue from an active travel plan, restaurant recommendation, diet plan, product result, or cart state.
+- General fallback conversation when a request does not belong to a supported business domain.
 
-这种分层避免 API 路由直接堆业务逻辑，也避免智能体直接操作所有系统资源，使后续替换模型、扩展领域、增加异步任务队列和观测能力更容易。
+### Multi-Agent Routing
 
-## 前端架构说明
+- `Supervisor` classifies user intent and handles ambiguity.
+- `Dispatcher` maps intent to the correct domain agent and loads the minimum required context.
+- `TravelAgent`, `RestaurantAgent`, `DietAgent`, and `CommerceAgent` own domain-specific behavior.
+- `CrossDomainComposer` combines related outputs, such as travel plans with food or product suggestions.
+- `PromptBuilder` and LLM service boundaries keep prompt construction, provider calls, and circuit-breaker behavior isolated from API handlers.
 
-前端采用 Next.js 14 App Router + React + TypeScript + Tailwind CSS。
+### Travel Planning
 
-- `app/`：页面路由，包括首页、AI 对话、行程、餐厅、饮食、商品、购物车、仪表盘、个人中心和设置。
-- `components/`：复用组件和业务组件，例如聊天输入、消息列表、结果卡片、历史面板、商品卡片、餐厅卡片、Toast、导航栏等。
-- `lib/api.ts`：统一 API 客户端，封装鉴权、请求和错误处理。
-- `lib/session.ts`：管理当前 AI 会话 ID，使业务页面可以携带上下文。
-- `lib/types.ts`：前端共享类型定义。
+- Natural-language itinerary generation.
+- Travel plan persistence, listing, detail retrieval, confirmation, and deletion.
+- Follow-up adjustment against the current plan.
+- Route planning support through the map service layer.
+- Weather and location-aware planning hooks.
 
-前端重点不是展示静态结果，而是把 AI 输出转成可操作界面：行程卡片可查看和确认，商品可加入购物车，历史对话可恢复，失效会话会自动清理。
+### Restaurants
 
-## 代码结构
+- Restaurant recommendation by city, cuisine, and user preference.
+- Nearby restaurant search.
+- Saved recommendation records.
+- Recommendation detail, selection, and deletion workflows.
+- Chat-context synchronization for follow-up questions.
+
+### Diet and Health
+
+- Health profile management.
+- Meal logging and meal history.
+- Meal summary retrieval.
+- Diet plan generation, listing, detail retrieval, confirmation, and deletion.
+- Nutrition analysis based on recent meal records and user context.
+
+### Commerce
+
+- Product categories, product search, filtering, pagination, and detail views.
+- AI-assisted product recommendations.
+- Cart creation, item insertion, quantity update, deletion, and clearing.
+- Order creation, order listing, detail retrieval, cancellation, status updates, and reorder flow.
+- Natural-language cart and reorder intents.
+
+### Feedback and Runtime Observability
+
+- Feedback capture for generated content.
+- Feedback statistics and analytics summary endpoints.
+- Runtime task records for chat and streaming workflows.
+- Domain event records for generated artifacts and execution state.
+- Failed task lookup and retry support.
+
+## Tech Stack
+
+| Layer | Technology |
+| --- | --- |
+| Frontend | Next.js 14, React 18, TypeScript, Tailwind CSS |
+| UX and client features | SSE, React Markdown, Leaflet, Serwist/PWA foundation |
+| Backend | FastAPI, Pydantic, SQLAlchemy Async ORM |
+| Auth | JWT, bcrypt, python-jose |
+| Data | PostgreSQL, SQLite-compatible development path |
+| Cache | Redis |
+| AI | OpenAI-compatible SDK, DeepSeek-compatible configuration |
+| External services | AMap, QWeather |
+| Testing | Pytest, pytest-asyncio, pytest-cov |
+| DevOps | Docker Compose, Uvicorn, environment-based configuration |
+
+## Repository Layout
 
 ```text
 AIGCTP/
 |-- backend/
 |   |-- app/
-|   |   |-- agents/        # Supervisor、Dispatcher 和各领域智能体
-|   |   |-- api/           # FastAPI 路由
-|   |   |-- core/          # 配置、数据库、安全、日志、Redis
-|   |   |-- middleware/    # 限流等中间件
-|   |   |-- models/        # SQLAlchemy ORM 模型
-|   |   |-- schemas/       # Pydantic Schema
-|   |   `-- services/      # 应用服务层和运行时能力
-|   |-- tests/             # 后端单元测试和 API 测试
+|   |   |-- agents/        # Supervisor, Dispatcher, domain agents, cross-domain composition
+|   |   |-- api/           # FastAPI routers for auth, chat, travel, diet, commerce, feedback, runtime
+|   |   |-- core/          # Settings, database, Redis, security, logging
+|   |   |-- middleware/    # Rate limiting and cross-cutting middleware
+|   |   |-- models/        # SQLAlchemy ORM entities
+|   |   |-- schemas/       # Pydantic request and response contracts
+|   |   `-- services/      # Orchestration, context, artifacts, runtime, LLM, maps, weather
+|   |-- tests/             # Backend API and agent tests
 |   |-- requirements.txt
 |   `-- run.py
 |-- frontend/
-|   |-- app/               # Next.js 页面
-|   |-- components/        # 前端组件
-|   |-- lib/               # API 客户端、会话工具、类型
+|   |-- app/               # Next.js App Router pages
+|   |-- components/        # Feature and UI components
+|   |-- lib/               # API client, session helpers, shared types
+|   |-- public/            # Brand assets and static files
+|   |-- sw/                # Service worker assets
 |   |-- package.json
 |   `-- tailwind.config.ts
 |-- docker-compose.yml
-|-- start.sh
 |-- .env.example
+|-- start.sh
 `-- README.md
 ```
 
-## 技术栈
+## Getting Started
 
-### 前端
+### Prerequisites
 
-- Next.js 14
-- React 18
-- TypeScript
-- Tailwind CSS
-- Server-Sent Events
-- PWA/离线页面基础
+- Node.js 20+
+- Python 3.11+
+- Docker and Docker Compose
+- PostgreSQL and Redis, or the provided Docker Compose services
+- API keys for your LLM provider, AMap, and QWeather if you want full external-service behavior
 
-### 后端
+### 1. Clone the repository
 
-- FastAPI
-- SQLAlchemy Async ORM
-- Pydantic
-- JWT
-- Redis
-- SQLite 开发模式
-- PostgreSQL 兼容部署
-- Pytest
-
-### AI 与外部服务
-
-- OpenAI 兼容 SDK
-- DeepSeek 兼容模型接口
-- AMap 地图 API
-- QWeather 天气 API
-
-## 快速启动
-
-### 1. 配置环境变量
-
-复制 `.env.example` 为 `.env`，并填写必要配置。
-
-```env
-DATABASE_URL=sqlite+aiosqlite:///./life_recommender.db
-LLM_API_KEY=your_api_key
-LLM_API_BASE=https://api.deepseek.com
-LLM_MODEL=deepseek-chat
-AMAP_API_KEY=your_amap_key
-QWEATHER_API_KEY=your_qweather_key
-JWT_SECRET=replace_with_a_strong_secret
-DEBUG=true
+```bash
+git clone https://github.com/F1ndWANG/AIGCTP.git
+cd AIGCTP
 ```
 
-### 2. 启动后端
+### 2. Configure environment variables
+
+```bash
+cp .env.example .env
+```
+
+Update `.env` with your own values:
+
+```env
+DATABASE_URL=postgresql+asyncpg://lifeai:lifeai_dev@localhost:5432/life_recommender
+REDIS_URL=redis://localhost:6379/0
+LLM_API_KEY=sk-your-api-key
+LLM_API_BASE=https://api.deepseek.com
+LLM_MODEL=deepseek-v4-pro
+AMAP_API_KEY=your_amap_api_key
+QWEATHER_API_KEY=your_qweather_key
+JWT_SECRET=replace-with-a-strong-secret
+```
+
+### 3. Start infrastructure
+
+```bash
+docker compose up -d postgres redis
+```
+
+### 4. Run the backend
 
 ```bash
 cd backend
-python -m venv venv
-venv\Scripts\activate
+python -m venv .venv
+.venv\Scripts\activate
 pip install -r requirements.txt
-python run.py
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-后端默认地址：
+Backend health checks:
 
-- `http://localhost:8000`
-- `http://localhost:8000/docs`
-- `http://localhost:8000/health`
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8000/api/v1/health/llm
+```
 
-### 3. 启动前端
+### 5. Run the frontend
 
 ```bash
 cd frontend
@@ -259,48 +253,90 @@ npm install
 npm run dev
 ```
 
-前端默认地址：
+Open `http://localhost:3000`.
 
-- `http://localhost:3000`
+### 6. Docker backend option
 
-## 测试
-
-后端测试：
+The compose file can also run the backend service with PostgreSQL and Redis:
 
 ```bash
-cd backend
+docker compose up --build
+```
+
+## API Surface
+
+All domain APIs are mounted under `/api/v1`.
+
+| Domain | Routes under `/api/v1` |
+| --- | --- |
+| Auth | `/auth/register`, `/auth/login` |
+| Users | `/users/me`, `/users/me/password`, `/users/me/preferences` |
+| Chat | `/chat`, `/chat/stream`, `/chat/sessions` |
+| Travel | `/travel/plans`, `/travel/plans/{id}`, confirmation and deletion |
+| Restaurants | `/restaurant/recommend`, `/restaurant/nearby`, saved recommendations |
+| Diet | `/diet/profile`, `/diet/meals`, `/diet/plans` |
+| Commerce | `/commerce/categories`, `/commerce/products`, `/commerce/cart`, `/commerce/orders` |
+| Feedback | `/feedback`, `/feedback/stats`, `/feedback/analytics/summary` |
+| Route | `/route` |
+| Runtime | `/runtime/tasks`, `/runtime/events`, task retry endpoints |
+
+FastAPI also exposes interactive API documentation at:
+
+```text
+http://localhost:8000/docs
+```
+
+## Testing
+
+Run backend tests from the `backend` directory:
+
+```bash
 pytest
 ```
 
-前端类型检查：
+Useful focused runs:
+
+```bash
+pytest tests/test_agents
+pytest tests/test_api
+pytest --cov=app
+```
+
+Frontend type and production-build checks:
 
 ```bash
 cd frontend
-npx tsc --noEmit
+npm run build
 ```
 
-## 适用场景
+## Design Notes
 
-- AI 多智能体系统课程项目。
-- 毕业设计或工程实践项目。
-- 全栈 AI 应用作品集。
-- 生活服务推荐系统原型。
-- 研究跨领域推荐、上下文记忆、智能体编排和人机协同决策的基础项目。
+- API routers are intentionally thin; business workflows live in services and agents.
+- Conversation state is persisted separately from generated business artifacts.
+- Runtime tasks and domain events make AI execution inspectable and retryable.
+- The frontend treats AI output as product state, not disposable text.
+- Provider-specific AI calls are isolated behind an OpenAI-compatible service boundary.
 
-## 后续演进方向
+## Roadmap
 
-- 引入任务队列，将长耗时 AI 工作流异步化。
-- 使用 PostgreSQL + Redis 部署生产环境。
-- 增加 OpenTelemetry、结构化日志和指标监控。
-- 强化推荐质量评估、用户反馈闭环和 A/B 测试。
-- 增加更细粒度的权限、审计和数据隔离。
-- 将领域智能体插件化，使新场景可以低成本接入。
-- 为关键业务流程补充端到端测试和浏览器自动化测试。
+- Add queue-backed asynchronous task execution for long-running agent workflows.
+- Introduce richer observability dashboards for runtime tasks and domain events.
+- Expand recommendation ranking with learned user preferences.
+- Add more robust deployment templates and CI checks.
+- Improve map visualization and itinerary collaboration flows.
 
-## 项目价值
+## Contributing
 
-AIGCTP 展示的是一个从“AI 对话”走向“AI 可执行系统”的完整工程路径。它将自然语言理解、多领域智能体、结构化业务结果、用户状态、运行时任务和前端交互统一到一个系统中，为构建更可用、更可扩展、更接近真实业务的 AI 应用提供了基础。
+Contributions are welcome. For substantial changes, open an issue first to discuss the proposed behavior and implementation plan.
+
+Recommended workflow:
+
+1. Fork the repository.
+2. Create a focused feature branch.
+3. Add or update tests for behavioral changes.
+4. Run the relevant backend and frontend checks.
+5. Open a pull request with a clear summary and validation notes.
 
 ## License
 
-当前项目尚未声明开源许可证。如需正式开源，建议补充明确的 License 文件。
+No license file is currently included. Add a license before distributing or reusing this project outside its current repository context.
