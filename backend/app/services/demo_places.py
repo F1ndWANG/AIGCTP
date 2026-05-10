@@ -145,6 +145,46 @@ _CITY_SCENIC_SPOTS: dict[str, list[dict]] = {
     ],
 }
 
+_CITY_HOTELS: dict[str, list[dict]] = {
+    "北京": [
+        {
+            "name": "前门/王府井商圈舒适型酒店",
+            "address": "建议选择前门、王府井或东单附近",
+            "rating": "4.6",
+            "tags": ["地铁便利", "靠近故宫天安门", "适合一日游"],
+            "longitude": 116.4074,
+            "latitude": 39.9042,
+            "price_level": "约 ¥450-750/晚",
+            "reason": "离故宫、天安门和核心地铁线路近，能减少早晚通勤时间。",
+            "tips": "优先选择步行 8 分钟内到地铁站、可免费取消、含早餐或可寄存行李的房型。",
+        },
+        {
+            "name": "什刹海/鼓楼胡同精品酒店",
+            "address": "建议选择什刹海、鼓楼或南锣鼓巷周边",
+            "rating": "4.5",
+            "tags": ["胡同体验", "夜游方便", "中高端"],
+            "longitude": 116.397,
+            "latitude": 39.939,
+            "price_level": "约 ¥600-950/晚",
+            "reason": "适合把什刹海夜游和胡同体验放在行程尾段，氛围更有北京特色。",
+            "tips": "注意查看隔音、停车和是否有电梯，胡同酒店房间面积差异较大。",
+        },
+    ],
+    "成都": [
+        {
+            "name": "春熙路/太古里舒适型酒店",
+            "address": "建议选择春熙路、太古里或市二医院地铁站附近",
+            "rating": "4.6",
+            "tags": ["地铁便利", "餐饮密集", "夜间出行方便"],
+            "longitude": 104.0817,
+            "latitude": 30.6578,
+            "price_level": "约 ¥350-650/晚",
+            "reason": "餐饮和交通选择集中，适合初次到成都的短途行程。",
+            "tips": "优先选择近地铁、可寄存行李、周边夜间餐饮丰富的房型。",
+        }
+    ],
+}
+
 
 def has_real_amap_key(api_key: Optional[str]) -> bool:
     if not api_key:
@@ -194,6 +234,25 @@ def demo_scenic_spots(city: str, limit: int = 20) -> list[dict]:
                 "rating": "4.5",
                 "tags": ["城市地标", "旅行推荐"],
                 "image_urls": [],
+            }
+        ]
+    return base[:limit]
+
+
+def demo_hotels(city: str, limit: int = 10) -> list[dict]:
+    base = list(_CITY_HOTELS.get(city, []))
+    if not base:
+        base = [
+            {
+                "name": f"{city}核心商圈舒适型酒店",
+                "address": f"建议选择{city}市中心或地铁换乘站附近",
+                "rating": "4.5",
+                "tags": ["交通便利", "适合短途旅行", "可寄存行李"],
+                "longitude": None,
+                "latitude": None,
+                "price_level": "约 ¥350-700/晚",
+                "reason": "短途行程更需要节省交通时间，核心商圈或地铁站附近更稳妥。",
+                "tips": "优先看地铁距离、取消政策、行李寄存、早餐和隔音评价。",
             }
         ]
     return base[:limit]
