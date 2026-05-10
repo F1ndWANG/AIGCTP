@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: aigctp
+  labels:
+    app.kubernetes.io/name: aigctp
+    app.kubernetes.io/component: backend
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/api/v1/metrics"
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: backend
+          image: ghcr.io/your-org/aigctp-backend:latest
+          imagePullPolicy: Always
+          args:
+            - uvicorn
+            - app.main:app
+            - "--host"
+            - "0.0.0.0"
+            - "--port"
+            - "8000"
+            - "--workers"
+            - "$(WORKERS)"
+            - "--proxy-headers"
+            - "--forwarded-allow-ips"
+            - "*"
+          ports:
+            - containerPort: 8000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: aigctp-config
+          env:
+            - name: DATABASE_URL
+              value: "postgresql+asyncpg://lifeai:$(POSTGRES_PASSWORD)@postgres:5432/life_recommender"
+            - name: REDIS_URL
+              value: redis://redis:6379/0
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: aigctp-secrets
+                  key: jwt-secret
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: aigctp-secrets
+                  key: postgres-password
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aigctp-secrets
+                  key: llm-api-key
+            - name: SENTRY_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: aigctp-secrets
+                  key: sentry-dsn
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health/ready
+              port: 8000
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3

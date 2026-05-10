@@ -10,12 +10,12 @@ from app.core.security import hash_password, verify_password
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get("/me", summary="Get current user profile", response_model=UserResponse)
 async def get_profile(current_user: User = Depends(get_current_user)):
     return UserResponse.model_validate(current_user)
 
 
-@router.put("/me", response_model=UserResponse)
+@router.put("/me", summary="Update user profile", response_model=UserResponse)
 async def update_profile(
     payload: UserUpdate,
     current_user: User = Depends(get_current_user),
@@ -30,7 +30,7 @@ async def update_profile(
     return UserResponse.model_validate(current_user)
 
 
-@router.put("/me/password", status_code=204)
+@router.put("/me/password", summary="Change password", status_code=204)
 async def change_password(
     payload: PasswordChange,
     current_user: User = Depends(get_current_user),
@@ -44,7 +44,7 @@ async def change_password(
     await db.commit()
 
 
-@router.put("/me/preferences", response_model=UserResponse)
+@router.put("/me/preferences", summary="Update user preferences", response_model=UserResponse)
 async def update_preferences(
     payload: UserPreferenceUpdate,
     current_user: User = Depends(get_current_user),

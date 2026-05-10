@@ -2,11 +2,7 @@ from datetime import datetime, timezone
 from sqlalchemy import Column, Index, Integer, String, DateTime, JSON, ForeignKey, Float, Date
 from sqlalchemy.orm import relationship
 
-from app.core.database import Base
-
-
-def _utcnow():
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+from app.core.database import Base, _utcnow
 
 
 class HealthProfile(Base):
@@ -22,8 +18,8 @@ class HealthProfile(Base):
     chronic_conditions = Column(JSON, default=list)
     diet_goals = Column(JSON, default=list)
     dietary_restrictions = Column(JSON, default=list)
-    created_at = Column(DateTime, default=_utcnow)
-    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     user = relationship("User", back_populates="health_profile")
 
@@ -41,13 +37,16 @@ class MealRecord(Base):
     foods = Column(JSON, default=list)
     total_nutrition = Column(JSON, nullable=True)
     notes = Column(String(500), default="")
-    created_at = Column(DateTime, default=_utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
 
     user = relationship("User", back_populates="meal_records")
 
 
 class DietPlan(Base):
     __tablename__ = "diet_plans"
+    __table_args__ = (
+        Index("ix_diet_plans_user_status", "user_id", "status"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -57,8 +56,8 @@ class DietPlan(Base):
     total_nutrition = Column(JSON, nullable=True)
     tips = Column(JSON, default=list)
     status = Column(String(20), default="draft")  # draft / active / completed
-    activated_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=_utcnow)
-    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+    activated_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     user = relationship("User", back_populates="diet_plans")

@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aigctp
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - deployment-backend.yaml
+  - deployment-frontend.yaml
+  - deployment-worker.yaml
+  - statefulset-postgres.yaml
+  - statefulset-redis.yaml
+  - service-backend.yaml
+  - service-frontend.yaml
+  - ingress.yaml
+  - hpa.yaml
+
+# Secrets are managed outside of kustomize; apply via kubectl create secret:
+#   kubectl create secret generic aigctp-secrets \
+#     --namespace aigctp \
+#     --from-literal=postgres-password='...' \
+#     --from-literal=jwt-secret='...' \
+#     --from-literal=llm-api-key='...' \
+#     --from-literal=sentry-dsn='...'

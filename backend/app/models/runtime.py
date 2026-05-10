@@ -2,11 +2,7 @@ from datetime import datetime, timezone
 from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, JSON, String
 from sqlalchemy.orm import relationship
 
-from app.core.database import Base
-
-
-def _utcnow():
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+from app.core.database import Base, _utcnow
 
 
 class TaskRun(Base):
@@ -29,10 +25,10 @@ class TaskRun(Base):
     error = Column(String(2000), default="")
     retry_count = Column(Integer, default=0)
     max_retries = Column(Integer, default=0)
-    started_at = Column(DateTime, default=_utcnow)
-    finished_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=_utcnow)
-    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+    started_at = Column(DateTime(timezone=True), default=_utcnow)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     user = relationship("User")
 
@@ -56,6 +52,6 @@ class DomainEvent(Base):
     aggregate_type = Column(String(50), default="", index=True)
     aggregate_id = Column(String(100), default="", index=True)
     payload = Column(JSON, default=dict)
-    created_at = Column(DateTime, default=_utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
 
     user = relationship("User")

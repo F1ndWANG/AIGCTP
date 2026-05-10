@@ -26,7 +26,7 @@ class FeedbackStatsResponse(BaseModel):
     dislikes: int
 
 
-@router.post("", status_code=201)
+@router.post("", summary="Submit feedback", status_code=201)
 async def submit_feedback(
     payload: FeedbackRequest,
     current_user: User = Depends(get_current_user),
@@ -48,7 +48,7 @@ async def submit_feedback(
     return {"status": "ok", "id": log.id}
 
 
-@router.get("/stats", response_model=list[FeedbackStatsResponse])
+@router.get("/stats", summary="Get feedback statistics", response_model=list[FeedbackStatsResponse])
 async def get_feedback_stats(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

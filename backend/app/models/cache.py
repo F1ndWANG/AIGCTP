@@ -1,11 +1,7 @@
 from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime, JSON, Float
 
-from app.core.database import Base
-
-
-def _utcnow():
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+from app.core.database import Base, _utcnow
 
 
 class CachedPOI(Base):
@@ -26,4 +22,4 @@ class CachedPOI(Base):
     opening_hours = Column(String(200), default="")
     image_urls = Column(JSON, default=list)
     raw_data = Column(JSON, default=dict)
-    cached_at = Column(DateTime, default=_utcnow)
+    cached_at = Column(DateTime(timezone=True), default=_utcnow)

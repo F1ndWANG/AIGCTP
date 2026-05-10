@@ -1,0 +1,92 @@
+version: '3.8'
+
+# ── E2E test stack ──────────────────────────────────────────────
+# Starts the full application plus a Playwright container that runs
+# the E2E test suite and exits with the test exit code.
+#
+# Usage:
+#   docker compose -f docker-compose.e2e.yml build
+#   docker compose -f docker-compose.e2e.yml run --rm e2e
+#   docker compose -f docker-compose.e2e.yml down -v
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: lifeai
+      POSTGRES_PASSWORD: lifeai_e2e
+      POSTGRES_DB: life_recommender_e2e
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lifeai -d life_recommender_e2e"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql+asyncpg://lifeai:lifeai_e2e@postgres:5432/life_recommender_e2e
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: e2e-test-jwt-secret-do-not-use-in-production
+      JWT_ACCESS_TOKEN_EXPIRE_HOURS: "24"
+      LLM_API_BASE: https://api.deepseek.com
+      LLM_API_KEY: placeholder
+      LLM_MODEL: deepseek-chat
+      CORS_ORIGINS: "*"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 15s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: test
+      API_URL: http://backend:8000
+    depends_on:
+      backend:
+        condition: service_started
+
+  e2e:
+    image: mcr.microsoft.com/playwright:v1.59.1-jammy
+    working_dir: /app/frontend
+    command: >
+      sh -c "
+        npm ci &&
+        npx playwright test --reporter=list
+      "
+    environment:
+      CI: "true"
+      BACKEND_URL: http://backend:8000
+      FRONTEND_URL: http://frontend:3000
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+    volumes:
+      - .:/app
+    depends_on:
+      frontend:
+        condition: service_started
+      backend:
+        condition: service_healthy
+    restart: "no"

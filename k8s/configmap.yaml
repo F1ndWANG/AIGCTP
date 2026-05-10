@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aigctp-config
+  namespace: aigctp
+  labels:
+    app.kubernetes.io/name: aigctp
+data:
+  APP_ENV: "production"
+  APP_NAME: "AIGCTP"
+  CORS_ORIGINS: "https://your-domain.com"
+  WORKERS: "4"
+  REDIS_MAX_CONNECTIONS: "20"
+  RATE_LIMIT_DEFAULT_PER_MINUTE: "60"
+  RATE_LIMIT_AUTH_PER_MINUTE: "5"
+  RATE_LIMIT_CHAT_PER_MINUTE: "30"
+  PASSWORD_MIN_LENGTH: "8"
+  LOGIN_MAX_ATTEMPTS: "5"
+  LOGIN_LOCKOUT_MINUTES: "15"
+  JWT_ACCESS_TOKEN_EXPIRE_HOURS: "2"
+  JWT_REFRESH_TOKEN_EXPIRE_DAYS: "30"
+  TRUSTED_PROXIES: "10.0.0.0/8 172.16.0.0/12 192.168.0.0/16"
+  LLM_MODEL: "deepseek-chat"
+  LLM_FALLBACK_MODEL: "deepseek-chat"
+  NODE_ENV: "production"

@@ -195,7 +195,7 @@ async def commerce_recommend(
 
     if not products:
         generated = await _create_ai_products(user_message, keywords, db, session_id=session_id)
-        await db.commit()
+        await db.flush()
         products = generated
 
     if not products:
@@ -409,7 +409,7 @@ async def auto_cart(
             "specs": specs,
         })
 
-    await db.commit()
+    await db.flush()
 
     if not added_items:
         return CartAgentResult(
@@ -497,7 +497,7 @@ async def quick_reorder(
 
         added_count += 1
 
-    await db.commit()
+    await db.flush()
 
     return ReorderAgentResult(
         response=f"已为您将订单 #{order.id} 中的 {added_count} 件商品重新加入购物车！",

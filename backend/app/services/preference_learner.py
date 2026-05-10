@@ -118,7 +118,7 @@ async def flush_to_db(
         from sqlalchemy.orm.attributes import flag_modified
         user.preferences = current
         flag_modified(user, "preferences")
-        await db.commit()
+        await db.flush()
         logger.info("Flushed %d preference categories for user %d", len(accumulated), user_id)
     except Exception as e:
         logger.warning("Failed to flush preferences: %s", e)

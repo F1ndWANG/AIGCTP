@@ -12,6 +12,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents import travel_agent
 from app.agents.result import AgentResult
 from app.agents.supervisor import run_agent, run_agent_stream
 from app.models.user import User
@@ -39,6 +40,8 @@ from app.services.runtime import (
     mark_task_succeeded,
 )
 from app.services.truncation import truncate_messages
+from datetime import datetime, timezone
+
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -51,6 +54,13 @@ async def _learn_from_message(
     db: AsyncSession,
 ) -> None:
     if len(user_message.strip()) < 10:
+        return
+    current_plan = context.get("current_travel_plan") or {}
+    constraints = travel_agent.infer_travel_constraints(
+        user_message,
+        current_plan.get("itinerary", {}) if isinstance(current_plan, dict) else {},
+    )
+    if constraints.get("avoid_pois"):
         return
     try:
         signals = await extract_preferences(user_message)
@@ -73,16 +83,19 @@ async def handle_chat(
     payload: ChatRequest,
     current_user: User,
     db: AsyncSession,
+    existing_task: Any | None = None,
 ) -> ChatResponse:
     session_id = payload.session_id or str(uuid.uuid4())
-    task = await create_task_run(
-        db=db,
-        user_id=current_user.id,
-        session_id=session_id,
-        task_type="chat",
-        input_payload={"message": payload.message, "travel_plan_id": payload.travel_plan_id},
-        max_retries=3,
-    )
+    task = existing_task
+    if task is None:
+        task = await create_task_run(
+            db=db,
+            user_id=current_user.id,
+            session_id=session_id,
+            task_type="chat",
+            input_payload={"message": payload.message, "travel_plan_id": payload.travel_plan_id},
+            max_retries=3,
+        )
     try:
         conversation, messages, context = await load_or_create_conversation(
             session_id,
@@ -92,6 +105,7 @@ async def handle_chat(
             db,
         )
         context = await load_travel_plan_context(payload.travel_plan_id, current_user.id, context, db)
+        _update_travel_memory_from_message(context, payload.message)
 
         messages.append({"role": "user", "content": payload.message, "session_id": session_id})
         messages = await truncate_messages(messages)
@@ -143,20 +157,75 @@ async def handle_chat(
         await save_conversation(conversation, messages, context, session_id, db)
         await _learn_from_message(payload.message, context, current_user.id, db)
 
+        await db.commit()  # single commit for the entire chat flow
         return build_chat_response(session_id, result, travel_plan_resp)
     except Exception as exc:
-        await db.rollback()
-        failed_task = await create_task_run(
-            db=db,
-            user_id=current_user.id,
-            session_id=session_id,
-            task_type="chat",
-            input_payload={"message": payload.message, "travel_plan_id": payload.travel_plan_id},
-            max_retries=3,
-        )
-        await mark_task_failed(failed_task, error=str(exc))
+        original_exc = exc
+        try:
+            await db.rollback()
+        except Exception as rb_exc:
+            logger.warning("Rollback failed during error handling: %s", rb_exc)
+        try:
+            from app.models.runtime import TaskRun
+            from sqlalchemy import select
+
+            stmt = select(TaskRun).where(TaskRun.task_id == task.task_id)
+            result = await db.execute(stmt)
+            t = result.scalar_one_or_none()
+            if t:
+                t.status = "failed"
+                t.error = str(original_exc)[:2000]
+                t.finished_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            await db.commit()
+        except Exception as inner_exc:
+            logger.warning("Task status update failed after chat error: %s", inner_exc)
+            await db.rollback()
+        raise original_exc
+
+
+async def enqueue_chat_background(
+    payload: ChatRequest,
+    current_user: User,
+    db: AsyncSession,
+) -> ChatResponse:
+    """Enqueue a chat message for background processing via arq.
+
+    The HTTP handler returns immediately with a ``task_id`` the client
+    can poll via ``GET /api/v1/runtime/tasks/{task_id}``.
+    """
+    from app.services.job_enqueue import enqueue_job
+
+    session_id = payload.session_id or str(uuid.uuid4())
+
+    task = await create_task_run(
+        db=db,
+        user_id=current_user.id,
+        session_id=session_id,
+        task_type="chat_background",
+        input_payload={"message": payload.message, "travel_plan_id": payload.travel_plan_id},
+        max_retries=2,
+    )
+    await db.commit()
+
+    job_id = await enqueue_job(
+        "background_chat_job",
+        user_id=current_user.id,
+        session_id=session_id,
+        message=payload.message,
+        travel_plan_id=payload.travel_plan_id,
+        task_id=task.task_id,
+    )
+
+    if job_id is None:
+        await mark_task_failed(task, error="Failed to enqueue background job")
         await db.commit()
-        raise
+        return build_chat_response(session_id, AgentResult(response="后台任务提交失败，请稍后重试。"))
+
+    return ChatResponse(
+        session_id=session_id,
+        message="已提交后台处理任务，你可以稍后查看结果。",
+        artifacts={"task_id": task.task_id, "job_id": job_id, "status": "pending"},
+    )
 
 
 async def stream_chat_events(
@@ -181,6 +250,7 @@ async def stream_chat_events(
         db,
     )
     context = await load_travel_plan_context(payload.travel_plan_id, current_user.id, context, db)
+    _update_travel_memory_from_message(context, payload.message)
 
     messages.append({"role": "user", "content": payload.message, "session_id": session_id})
     messages = await truncate_messages(messages)
@@ -219,47 +289,61 @@ async def stream_chat_events(
 
     messages.append({"role": "assistant", "content": full_response, "session_id": session_id})
 
-    if result.travel_plan:
-        travel_plan_resp, ctx_update = await save_or_update_travel_plan(
-            result.travel_plan,
-            current_user.id,
-            payload.travel_plan_id,
-            db,
+    try:
+        if result.travel_plan:
+            travel_plan_resp, ctx_update = await save_or_update_travel_plan(
+                result.travel_plan,
+                current_user.id,
+                payload.travel_plan_id,
+                db,
+            )
+            if ctx_update:
+                context["current_travel_plan"] = ctx_update
+                plan_dict = travel_plan_resp.model_dump(mode="json") if travel_plan_resp else ctx_update
+                yield _sse({"type": "plan", "content": plan_dict})
+
+        restaurant_record = await save_restaurant_recommendation(
+            result=result,
+            user_id=current_user.id,
+            session_id=session_id,
+            query=payload.message,
+            db=db,
         )
-        if ctx_update:
-            context["current_travel_plan"] = ctx_update
-            plan_dict = travel_plan_resp.model_dump(mode="json") if travel_plan_resp else ctx_update
-            yield _sse({"type": "plan", "content": plan_dict})
+        if restaurant_record:
+            result.restaurant_recommendation_id = restaurant_record.id
+            result.restaurant_recommendation = restaurant_record
+            yield _sse({"type": "restaurants", "content": restaurant_record.model_dump(mode="json")})
 
-    restaurant_record = await save_restaurant_recommendation(
-        result=result,
-        user_id=current_user.id,
-        session_id=session_id,
-        query=payload.message,
-        db=db,
-    )
-    if restaurant_record:
-        result.restaurant_recommendation_id = restaurant_record.id
-        result.restaurant_recommendation = restaurant_record
-        yield _sse({"type": "restaurants", "content": restaurant_record.model_dump(mode="json")})
+        await _emit_result_events(
+            db=db,
+            user_id=current_user.id,
+            session_id=session_id,
+            task_id=task.task_id,
+            result=result,
+            travel_plan=travel_plan_resp,
+            restaurant_record=restaurant_record,
+        )
+        if stream_error:
+            await mark_task_failed(task, error=stream_error, result_payload=_task_result_payload(result))
+        else:
+            await mark_task_succeeded(task, result_payload=_task_result_payload(result))
 
-    await _emit_result_events(
-        db=db,
-        user_id=current_user.id,
-        session_id=session_id,
-        task_id=task.task_id,
-        result=result,
-        travel_plan=travel_plan_resp,
-        restaurant_record=restaurant_record,
-    )
-    if stream_error:
-        await mark_task_failed(task, error=stream_error, result_payload=_task_result_payload(result))
-    else:
-        await mark_task_succeeded(task, result_payload=_task_result_payload(result))
-
-    _sync_artifacts_to_context(context, result)
-    await save_conversation(conversation, messages, context, session_id, db)
-    await _learn_from_message(payload.message, context, current_user.id, db)
+        _sync_artifacts_to_context(context, result)
+        await save_conversation(conversation, messages, context, session_id, db)
+        await _learn_from_message(payload.message, context, current_user.id, db)
+        await db.commit()
+    except Exception as exc:
+        logger.warning("Chat stream persistence error: %s", exc)
+        try:
+            await db.rollback()
+        except Exception as rb_exc:
+            logger.warning("Rollback failed during stream error handling: %s", rb_exc)
+        try:
+            await mark_task_failed(task, error=str(exc), result_payload=_task_result_payload(result))
+            await db.commit()
+        except Exception:
+            await db.rollback()
+        yield _sse({"type": "error", "content": "对话结果保存失败，请重试。"})
     yield _sse({"type": "done"})
 
 
@@ -275,6 +359,20 @@ def _sync_artifacts_to_context(context: dict[str, Any], result: AgentResult) -> 
         context["current_diet_plan"] = result.diet_plan
     if result.cart_items:
         context["current_cart_items"] = result.cart_items
+
+
+def _update_travel_memory_from_message(context: dict[str, Any], user_message: str) -> None:
+    current_plan = context.get("current_travel_plan") or {}
+    current_itinerary = current_plan.get("itinerary", {}) if isinstance(current_plan, dict) else {}
+    constraints = travel_agent.infer_travel_constraints(user_message, current_itinerary)
+    if not constraints.get("avoid_pois") and not constraints.get("requested_pois"):
+        return
+    context["travel_memory"] = travel_agent.merge_travel_memory(
+        context.get("travel_memory"),
+        avoid_pois=constraints.get("avoid_pois"),
+        requested_pois=constraints.get("requested_pois"),
+        last_adjustment=user_message,
+    )
 
 
 def _artifact_events(result: AgentResult) -> list[dict[str, Any]]:

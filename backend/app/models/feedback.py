@@ -1,16 +1,15 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, DateTime, JSON, ForeignKey
+from sqlalchemy import Column, Index, Integer, String, DateTime, JSON, ForeignKey
 from sqlalchemy.orm import relationship
 
-from app.core.database import Base
-
-
-def _utcnow():
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+from app.core.database import Base, _utcnow
 
 
 class RecommendationLog(Base):
     __tablename__ = "recommendation_logs"
+    __table_args__ = (
+        Index("ix_rec_logs_user_type", "user_id", "content_type"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -19,6 +18,6 @@ class RecommendationLog(Base):
     feedback = Column(String(10), nullable=False)      # "like" or "dislike"
     content_snapshot = Column(JSON, default=dict)       # snapshot of recommended content
     context = Column(JSON, default=dict)                # session context at time of feedback
-    created_at = Column(DateTime, default=_utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
 
     user = relationship("User", backref="recommendation_logs")

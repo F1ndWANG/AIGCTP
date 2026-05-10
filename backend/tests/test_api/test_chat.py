@@ -157,6 +157,110 @@ class TestChat:
         pois = [activity["poi"] for activity in activities]
         assert "什刹海" in pois
 
+    async def test_travel_adjust_remembers_and_replaces_excluded_related_pois(
+        self,
+        client,
+        auth_headers,
+        monkeypatch,
+    ):
+        async def fake_fetch_domain_data(*args, **kwargs):
+            return (
+                [
+                    {"name": "天安门广场", "category": "景点"},
+                    {"name": "天安门", "category": "景点"},
+                    {"name": "故宫博物院", "category": "景点"},
+                    {"name": "北海公园", "category": "景点"},
+                    {"name": "景山公园", "category": "景点"},
+                ],
+                [],
+                [],
+                [{"condition": "晴", "temp_min": "10", "temp_max": "24"}],
+                [],
+            )
+
+        attempts = {"count": 0}
+
+        async def fake_chat_with_artifact(*args, **kwargs):
+            attempts["count"] += 1
+            if attempts["count"] == 1:
+                return {
+                    "text": "我会帮你调整行程。",
+                    "artifact": {
+                        "destination": "北京",
+                        "days": 1,
+                        "theme": "调整后的北京一日游",
+                        "day_by_day": [
+                            {
+                                "day": 1,
+                                "theme": "文化探索",
+                                "activities": [
+                                    {"time": "上午", "poi": "天安门广场", "duration": "2小时"},
+                                    {"time": "下午", "poi": "北海公园", "duration": "2小时"},
+                                ],
+                                "meals": [],
+                                "shopping": [],
+                                "hotel": {},
+                                "transport_tips": "",
+                            }
+                        ],
+                    },
+                }
+            return {
+                "text": "已避开天安门相关景点，改为北海公园和景山公园。",
+                "artifact": {
+                    "destination": "北京",
+                    "days": 1,
+                    "theme": "北京公园与古都漫步",
+                    "day_by_day": [
+                        {
+                            "day": 1,
+                            "theme": "北海景山漫步",
+                            "activities": [
+                                {"time": "上午", "poi": "北海公园", "duration": "2小时"},
+                                {"time": "下午", "poi": "景山公园", "duration": "2小时"},
+                            ],
+                            "meals": [],
+                            "shopping": [],
+                            "hotel": {},
+                            "transport_tips": "",
+                        }
+                    ],
+                },
+            }
+
+        monkeypatch.setattr("app.agents.travel_agent._fetch_domain_data", fake_fetch_domain_data)
+        monkeypatch.setattr("app.services.llm.llm_service.chat_with_artifact", fake_chat_with_artifact)
+
+        created = await client.post("/api/v1/chat", headers=auth_headers, json={
+            "message": "规划北京一日游",
+            "session_id": "avoid-tiananmen-session",
+        })
+        assert created.status_code == 200
+        plan = created.json()["travel_plan"]
+
+        adjusted = await client.post("/api/v1/chat", headers=auth_headers, json={
+            "message": "我不想去天安门，帮我换别的",
+            "session_id": "avoid-tiananmen-session",
+            "travel_plan_id": plan["id"],
+        })
+        assert adjusted.status_code == 200
+        data = adjusted.json()
+        activities = data["travel_plan"]["itinerary"]["day_by_day"][0]["activities"]
+        pois = [activity["poi"] for activity in activities]
+
+        assert "天安门" not in "".join(pois)
+        assert "北海公园" in pois
+        assert "景山公园" in pois
+        assert "已根据你的要求避开" in data["message"]
+
+        session_detail = await client.get(
+            "/api/v1/chat/sessions/avoid-tiananmen-session",
+            headers=auth_headers,
+        )
+        assert session_detail.status_code == 200
+        memory = session_detail.json()["context"]["travel_memory"]
+        assert "天安门广场" in memory["avoid_pois"]
+
 
 class TestChatIntentClassification:
     @pytest.mark.parametrize("message", [

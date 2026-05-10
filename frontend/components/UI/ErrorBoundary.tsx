@@ -1,6 +1,8 @@
 "use client";
 
 import { Component, type ReactNode } from "react";
+import { AlertTriangle, RefreshCw } from "lucide-react";
+import { Button } from "@/components/UI/button";
 
 interface Props {
   children: ReactNode;
@@ -30,19 +32,22 @@ export class ErrorBoundary extends Component<Props, State> {
       if (this.props.fallback) return this.props.fallback;
       return (
         <div className="flex flex-col items-center justify-center p-8 text-center">
-          <div className="text-red-500 text-4xl mb-4">⚠</div>
-          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-2">
+          <div className="w-12 h-12 rounded-2xl bg-destructive/10 flex items-center justify-center mb-4">
+            <AlertTriangle className="w-6 h-6 text-destructive" />
+          </div>
+          <h2 className="text-lg font-semibold text-foreground mb-2">
             出现异常
           </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 max-w-md">
+          <p className="text-sm text-muted-foreground mb-4 max-w-md">
             {this.state.error?.message || "程序出现了意外错误"}
           </p>
-          <button
+          <Button
+            variant="default"
             onClick={() => this.setState({ hasError: false, error: null })}
-            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
           >
+            <RefreshCw className="mr-2 h-4 w-4" />
             重试
-          </button>
+          </Button>
         </div>
       );
     }

@@ -6,8 +6,9 @@ import { useAuth } from "@/components/Layout/AuthProvider";
 import CartView from "@/components/Commerce/CartView";
 import OrdersView from "@/components/Commerce/OrdersView";
 import { chatHref } from "@/lib/session";
-
-type Tab = "cart" | "orders";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/UI/tabs";
+import { ArrowLeft } from "lucide-react";
+import { motion } from "motion/react";
 
 export default function CartPage() {
   const { user, loading } = useAuth();
@@ -16,9 +17,13 @@ export default function CartPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full" />
-      </div>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="min-h-screen flex items-center justify-center"
+      >
+        <div className="animate-spin w-8 h-8 border-2 border-fuchsia-600 border-t-transparent rounded-full" />
+      </motion.div>
     );
   }
 
@@ -28,39 +33,45 @@ export default function CartPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
-      {/* Header */}
-      <div className="bg-white dark:bg-slate-800 border-b dark:border-slate-700">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-3">
-          <button onClick={() => router.push(chatHref())} className="text-sm text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">
-            ← 返回对话
-          </button>
-          <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">购物</h1>
-        </div>
-
-        {/* Tabs */}
-        <div className="max-w-4xl mx-auto flex px-4">
-          {([{ key: "cart" as const, label: "购物车" }, { key: "orders" as const, label: "订单历史" }]).map((tab) => (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className="min-h-screen bg-background"
+    >
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => setActiveTab(v as "cart" | "orders")}
+      >
+        <div className="max-w-4xl mx-auto w-full px-4 py-6">
+          <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
             <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`px-5 py-3 text-sm font-medium border-b-2 transition ${
-                activeTab === tab.key
-                  ? "text-blue-600 border-blue-600"
-                  : "text-gray-500 dark:text-gray-400 border-transparent hover:text-gray-700 dark:hover:text-gray-300"
-              }`}
+              onClick={() => router.push(chatHref())}
+                className="mb-2 -ml-1 text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
             >
-              {tab.label}
+              <ArrowLeft className="w-4 h-4" />
+              返回对话
             </button>
-          ))}
-        </div>
-      </div>
+              <h1 className="text-2xl font-bold text-foreground">购物</h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                购物车和订单会在产生数据后展示。
+              </p>
+          </div>
+            <TabsList variant="line" className="self-start sm:self-auto">
+              <TabsTrigger value="cart">购物车</TabsTrigger>
+              <TabsTrigger value="orders">订单历史</TabsTrigger>
+            </TabsList>
+          </div>
 
-      {/* Content */}
-      <div className="max-w-4xl mx-auto px-4 py-6">
-        {activeTab === "cart" && <CartView onNavigateChat={() => router.push(chatHref())} />}
-        {activeTab === "orders" && <OrdersView />}
-      </div>
-    </div>
+          <TabsContent value="cart">
+            <CartView onNavigateChat={() => router.push(chatHref())} />
+          </TabsContent>
+          <TabsContent value="orders">
+            <OrdersView />
+          </TabsContent>
+        </div>
+      </Tabs>
+    </motion.div>
   );
 }

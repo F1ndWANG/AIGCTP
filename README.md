@@ -20,126 +20,177 @@
 
 ## Overview
 
-AIGCTP is an AI-native recommendation and planning system for everyday life scenarios. It is designed around a simple product idea: users should be able to describe a real-world need once, and the system should route that request to the right domain workflow, preserve the result, and keep it actionable.
+AIGCTP is a full-stack AI life-service platform. It combines a conversational entry point with structured product modules so that one natural-language request can become a saved travel plan, restaurant recommendation, diet plan, product recommendation, cart operation, order workflow, or reusable conversation artifact.
 
-Unlike a single-purpose chatbot, AIGCTP combines conversational AI with structured application modules. A user can ask for a weekend trip, request nearby restaurants, log meals, generate a diet plan, search products, add items to a cart, and return to previous conversations or saved artifacts later.
+The system is intentionally built as an application rather than a standalone chatbot. The frontend presents concrete business pages for authentication, chat, travel, restaurants, diet, products, cart, dashboard, profile, and settings. The backend keeps HTTP handlers thin, routes AI requests through a supervisor and dispatcher, persists generated artifacts, records runtime events, and exposes normal REST APIs for every domain.
 
-The project is suitable for:
+The current development setup is optimized for local demo readiness. Redis can fall back to an in-memory backend, third-party map keys can fall back to curated demo POI and restaurant data, and generated AI artifacts are synchronized into normal app pages such as travel plans, restaurant recommendations, products, and carts.
 
-- multi-agent systems coursework or research prototypes,
-- graduation projects and full-stack portfolio demonstrations,
-- AI application architecture studies,
-- and experiments that connect LLM reasoning with executable business workflows.
+The project is useful for:
 
-## Highlights
+- AI application architecture demonstrations.
+- Multi-agent routing and orchestration experiments.
+- Full-stack portfolio or course projects.
+- Prototypes that connect LLM reasoning with persistent business workflows.
 
-- Unified AI entry point for travel, restaurants, diet, commerce, and general conversation.
-- Hybrid intent routing with keyword fast paths, LLM semantic classification, clarification handling, and domain dispatch.
-- Agent-oriented backend with Supervisor, Dispatcher, Travel, Restaurant, Diet, Commerce, and Cross-Domain composition modules.
-- Persistent artifacts for travel plans, restaurant recommendations, diet plans, conversations, carts, orders, feedback, runtime tasks, and domain events.
-- Streaming chat support through Server-Sent Events, including progress messages and artifact events.
-- Production-oriented service boundaries for context building, conversation storage, artifact synchronization, preference learning, runtime tracking, LLM access, maps, and weather.
-- Full-stack user experience with authentication, restored sessions, result cards, business pages, feedback surfaces, and offline/PWA foundations.
+## Key Features
+
+- Unified AI chat entry point for travel, restaurants, diet, commerce, and general conversation.
+- Hybrid intent classification with keyword fast paths, LLM semantic classification, parameter extraction, and clarification prompts.
+- Multi-agent backend with Supervisor, Dispatcher, TravelAgent, RestaurantAgent, DietAgent, CommerceAgent, and CrossDomainComposer.
+- Server-Sent Events streaming for chat progress, model tokens, final results, and generated artifacts.
+- Centralized frontend API client with request timeouts, retry handling, token refresh, and shared auth recovery for REST and streaming calls.
+- Persistent application artifacts for conversations, travel plans, restaurant recommendations, health profiles, meal records, diet plans, products, carts, orders, feedback, task runs, and domain events.
+- JWT authentication with refresh tokens, login lockout support, password hashing, and user preference storage.
+- Development-friendly Redis fallback with production-ready Redis cache and async job infrastructure.
+- Production-oriented middleware for CORS, request IDs, rate limiting, security headers, metrics, logging, and readiness checks.
+- Local AMap fallback data for demo travel POIs and restaurant search when external keys are not configured.
+- Next.js PWA foundation using Serwist service worker assets.
+- Polished authentication shell, responsive dashboard, persistent navigation, and generated product image assets for the commerce catalog.
+- Docker Compose, production Compose, Kubernetes manifests, Nginx config, load-test assets, and monitoring dashboard artifacts.
 
 ## Architecture
 
 ```text
+Client Browser
+  |
+  v
 Next.js 14 Frontend
-  app/
-    chat, plans, travel, restaurants, diet, products, cart,
-    dashboard, profile, settings, offline
-  components/
-    Chat, Commerce, Diet, Home, Layout, Map, Restaurant, TravelPlan, UI
-        |
-        v
-FastAPI API Layer
-  auth, users, chat, travel, restaurant, diet, commerce,
-  feedback, route, runtime
-        |
-        v
+  app/              pages and routes
+  components/       feature and UI components
+  lib/api.ts        typed API client, token refresh, retry handling, SSE parsing
+  next.config.js    /api/* rewrite to FastAPI /api/v1/*
+  |
+  v
+FastAPI Backend
+  app/main.py       application startup, middleware, router registration
+  app/api/          auth, users, chat, travel, restaurant, diet, commerce,
+                   feedback, route, runtime
+  |
+  v
 Application Services
-  ChatOrchestrator
-  ConversationService
-  ArtifactService
-  ContextBuilder
-  PreferenceLearner
-  RuntimeService
-  LLM / AMap / Weather clients
-        |
-        v
+  ChatOrchestrator          request workflow and SSE event generation
+  ConversationService       session persistence and restoration
+  ArtifactService           generated artifact synchronization
+  RuntimeService            task runs, domain events, retry metadata
+  PreferenceLearner         user preference extraction and storage
+  LLM / AMap / Weather      external provider boundaries and local fallbacks
+  |
+  v
 Agent Layer
-  Supervisor -> Dispatcher
-    TravelAgent
-    RestaurantAgent
-    DietAgent
-    CommerceAgent
-    CrossDomainComposer
-        |
-        v
+  Supervisor                intent classification and clarification
+  Dispatcher                intent-to-agent routing
+  TravelAgent               itinerary generation and adjustment
+  RestaurantAgent           restaurant recommendation
+  DietAgent                 meal logging, nutrition analysis, diet plans
+  CommerceAgent             product recommendation, cart and reorder intents
+  CrossDomainComposer       combined travel, food, and product results
+  |
+  v
 Persistence and Infrastructure
-  PostgreSQL / SQLite
-  Redis
-  OpenAI-compatible LLM provider
-  AMap
-  QWeather
+  PostgreSQL / SQLite       relational application data
+  Redis / InMemoryRedis     cache, rate limit state, background queue, dev fallback
+  arq Worker                async chat and long-running domain jobs
+  OpenAI-compatible LLM     DeepSeek-compatible default configuration
+  AMap / QWeather           maps, POI, route, and weather data with demo fallback paths
 ```
 
-## Core Capabilities
+## Request Flow
+
+### Streaming Chat
+
+```text
+frontend chat.sendStream()
+  -> POST /api/chat/stream
+  -> Next.js rewrite to /api/v1/chat/stream
+  -> FastAPI chat router
+  -> ChatOrchestrator.stream_chat_events()
+  -> Supervisor intent classification
+  -> Dispatcher domain routing
+  -> Domain agent execution
+  -> Artifact persistence and runtime event emission
+  -> SSE events back to the browser
+```
+
+The stream can emit thinking messages, LLM tokens, final text, travel plans, restaurant recommendations, diet plans, product results, cart items, errors, and completion events.
+
+### Non-Streaming Chat
+
+```text
+frontend chat.send()
+  -> POST /api/chat
+  -> shared request client handles timeout, retry, and auth refresh
+  -> ChatOrchestrator.handle_chat()
+  -> Supervisor and Dispatcher
+  -> Agent result
+  -> saved conversation and artifacts
+  -> ChatResponse
+```
+
+### Domain APIs
+
+The app does not rely only on chat. Each business area also has direct REST endpoints so generated artifacts can be listed, opened, updated, confirmed, deleted, retried, or reused from normal pages.
+
+## Capabilities
 
 ### Conversational AI
 
-- Synchronous chat endpoint and SSE streaming endpoint.
-- Conversation session creation, listing, restoration, and deletion.
-- Context-aware routing that can continue from an active travel plan, restaurant recommendation, diet plan, product result, or cart state.
-- General fallback conversation when a request does not belong to a supported business domain.
+- Synchronous and streaming chat endpoints.
+- Conversation creation, listing, restoration, and deletion.
+- Session-aware follow-up handling.
+- Context-aware continuation from saved travel plans and generated artifacts.
+- General fallback conversation when no supported business intent is detected.
 
 ### Multi-Agent Routing
 
 - `Supervisor` classifies user intent and handles ambiguity.
-- `Dispatcher` maps intent to the correct domain agent and loads the minimum required context.
-- `TravelAgent`, `RestaurantAgent`, `DietAgent`, and `CommerceAgent` own domain-specific behavior.
-- `CrossDomainComposer` combines related outputs, such as travel plans with food or product suggestions.
-- `PromptBuilder` and LLM service boundaries keep prompt construction, provider calls, and circuit-breaker behavior isolated from API handlers.
+- `Dispatcher` maps intents to domain agents and loads the required context.
+- Keyword and LLM classifiers cooperate to reduce cost while keeping flexible natural-language handling.
+- Clarification responses are returned when intent confidence or required parameters are insufficient.
+- Cross-domain composition can enrich travel results with food or product suggestions.
 
 ### Travel Planning
 
 - Natural-language itinerary generation.
-- Travel plan persistence, listing, detail retrieval, confirmation, and deletion.
-- Follow-up adjustment against the current plan.
-- Route planning support through the map service layer.
-- Weather and location-aware planning hooks.
+- Follow-up plan adjustment against the current itinerary.
+- Streaming chat artifact persistence so generated plans appear in the travel-plan pages.
+- Travel plan listing, detail retrieval, confirmation, and deletion.
+- POI search, route planning, and weather-aware itinerary hooks.
+- Travel memory for excluded or requested POIs across follow-up messages.
 
 ### Restaurants
 
-- Restaurant recommendation by city, cuisine, and user preference.
-- Nearby restaurant search.
+- Restaurant recommendation by city, cuisine, and dietary context.
+- Nearby restaurant recommendation path.
+- Curated local restaurant fallback for common demo cities when AMap is not configured.
 - Saved recommendation records.
 - Recommendation detail, selection, and deletion workflows.
-- Chat-context synchronization for follow-up questions.
 
 ### Diet and Health
 
 - Health profile management.
 - Meal logging and meal history.
-- Meal summary retrieval.
+- Meal summary and nutrition analysis.
 - Diet plan generation, listing, detail retrieval, confirmation, and deletion.
-- Nutrition analysis based on recent meal records and user context.
+- Health-profile-aware recommendations.
 
 ### Commerce
 
 - Product categories, product search, filtering, pagination, and detail views.
 - AI-assisted product recommendations.
+- Local generated product image assets for the seeded catalog.
 - Cart creation, item insertion, quantity update, deletion, and clearing.
-- Order creation, order listing, detail retrieval, cancellation, status updates, and reorder flow.
-- Natural-language cart and reorder intents.
+- Order creation, listing, detail retrieval, cancellation, status updates, and reorder flow.
+- Natural-language auto-cart and quick reorder intents.
 
 ### Feedback and Runtime Observability
 
 - Feedback capture for generated content.
 - Feedback statistics and analytics summary endpoints.
-- Runtime task records for chat and streaming workflows.
+- Runtime task records for chat and background workflows.
 - Domain event records for generated artifacts and execution state.
 - Failed task lookup and retry support.
+- Metrics endpoint and Grafana dashboard artifact.
 
 ## Tech Stack
 
@@ -150,37 +201,52 @@ Persistence and Infrastructure
 | Backend | FastAPI, Pydantic, SQLAlchemy Async ORM |
 | Auth | JWT, bcrypt, python-jose |
 | Data | PostgreSQL, SQLite-compatible development path |
-| Cache | Redis |
+| Cache | Redis with development in-memory fallback |
+| Background jobs | arq worker on Redis |
 | AI | OpenAI-compatible SDK, DeepSeek-compatible configuration |
-| External services | AMap, QWeather |
+| External services | AMap, QWeather, local demo fallbacks |
 | Testing | Pytest, pytest-asyncio, pytest-cov |
-| DevOps | Docker Compose, Uvicorn, environment-based configuration |
+| Frontend testing | Playwright |
+| DevOps | Docker Compose, production Compose, Kubernetes, Nginx, Uvicorn |
 
 ## Repository Layout
 
 ```text
 AIGCTP/
 |-- backend/
+|   |-- alembic/           # Database migrations
 |   |-- app/
 |   |   |-- agents/        # Supervisor, Dispatcher, domain agents, cross-domain composition
-|   |   |-- api/           # FastAPI routers for auth, chat, travel, diet, commerce, feedback, runtime
-|   |   |-- core/          # Settings, database, Redis, security, logging
-|   |   |-- middleware/    # Rate limiting and cross-cutting middleware
+|   |   |-- api/           # FastAPI routers
+|   |   |-- core/          # Settings, database, Redis, security, logging, metrics
+|   |   |-- middleware/    # Rate limiting and security headers
 |   |   |-- models/        # SQLAlchemy ORM entities
 |   |   |-- schemas/       # Pydantic request and response contracts
-|   |   `-- services/      # Orchestration, context, artifacts, runtime, LLM, maps, weather
+|   |   |-- services/      # Orchestration, context, artifacts, runtime, LLM, maps, weather, demo fallbacks
+|   |   |-- jobs.py        # arq background job definitions
+|   |   `-- main.py        # FastAPI app entry point
 |   |-- tests/             # Backend API and agent tests
 |   |-- requirements.txt
-|   `-- run.py
+|   |-- requirements-dev.txt
+|   |-- run.py
+|   `-- run_worker.py
 |-- frontend/
 |   |-- app/               # Next.js App Router pages
 |   |-- components/        # Feature and UI components
 |   |-- lib/               # API client, session helpers, shared types
-|   |-- public/            # Brand assets and static files
+|   |-- public/            # Brand assets, product images, and static files
 |   |-- sw/                # Service worker assets
 |   |-- package.json
+|   |-- playwright.config.ts
 |   `-- tailwind.config.ts
+|-- docs/                  # Project documentation
+|-- k8s/                   # Kubernetes manifests
+|-- loadtest/              # Load-test assets
+|-- monitoring/            # Grafana dashboard artifact
+|-- nginx/                 # Reverse proxy configuration
 |-- docker-compose.yml
+|-- docker-compose.prod.yml
+|-- docker-compose.e2e.yml
 |-- .env.example
 |-- start.sh
 `-- README.md
@@ -195,15 +261,16 @@ AIGCTP/
 - Docker and Docker Compose
 - PostgreSQL and Redis, or the provided Docker Compose services
 - API keys for your LLM provider, AMap, and QWeather if you want full external-service behavior
+- For local demos, `REDIS_URL=memory://` and placeholder AMap/QWeather keys are supported with graceful fallbacks
 
-### 1. Clone the repository
+### 1. Clone
 
 ```bash
 git clone https://github.com/F1ndWANG/AIGCTP.git
 cd AIGCTP
 ```
 
-### 2. Configure environment variables
+### 2. Configure Environment
 
 ```bash
 cp .env.example .env
@@ -213,22 +280,24 @@ Update `.env` with your own values:
 
 ```env
 DATABASE_URL=postgresql+asyncpg://lifeai:lifeai_dev@localhost:5432/life_recommender
-REDIS_URL=redis://localhost:6379/0
+REDIS_URL=memory://
 LLM_API_KEY=sk-your-api-key
 LLM_API_BASE=https://api.deepseek.com
-LLM_MODEL=deepseek-v4-pro
+LLM_MODEL=deepseek-v4-flash
 AMAP_API_KEY=your_amap_api_key
 QWEATHER_API_KEY=your_qweather_key
 JWT_SECRET=replace-with-a-strong-secret
 ```
 
-### 3. Start infrastructure
+Use `REDIS_URL=redis://localhost:6379/0` when a real Redis service is available. In production, configure real Redis, AMap, QWeather, and a strong JWT secret.
+
+### 3. Start Infrastructure
 
 ```bash
 docker compose up -d postgres redis
 ```
 
-### 4. Run the backend
+### 4. Run Backend
 
 ```bash
 cd backend
@@ -242,10 +311,11 @@ Backend health checks:
 
 ```bash
 curl http://localhost:8000/health
+curl http://localhost:8000/api/v1/health/ready
 curl http://localhost:8000/api/v1/health/llm
 ```
 
-### 5. Run the frontend
+### 5. Run Frontend
 
 ```bash
 cd frontend
@@ -255,12 +325,27 @@ npm run dev
 
 Open `http://localhost:3000`.
 
-### 6. Docker backend option
+### 6. Optional Background Worker
+
+For background chat or long-running jobs:
+
+```bash
+cd backend
+python run_worker.py
+```
+
+### 7. Docker Compose Option
 
 The compose file can also run the backend service with PostgreSQL and Redis:
 
 ```bash
 docker compose up --build
+```
+
+For the production-style stack:
+
+```bash
+docker compose -f docker-compose.prod.yml up --build
 ```
 
 ## API Surface
@@ -269,7 +354,7 @@ All domain APIs are mounted under `/api/v1`.
 
 | Domain | Routes under `/api/v1` |
 | --- | --- |
-| Auth | `/auth/register`, `/auth/login` |
+| Auth | `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` |
 | Users | `/users/me`, `/users/me/password`, `/users/me/preferences` |
 | Chat | `/chat`, `/chat/stream`, `/chat/sessions` |
 | Travel | `/travel/plans`, `/travel/plans/{id}`, confirmation and deletion |
@@ -285,6 +370,26 @@ FastAPI also exposes interactive API documentation at:
 ```text
 http://localhost:8000/docs
 ```
+
+## Configuration
+
+Important environment variables:
+
+| Variable | Purpose |
+| --- | --- |
+| `APP_ENV` | `development`, `staging`, or `production` |
+| `DEBUG` | Enables verbose development behavior |
+| `DATABASE_URL` | SQLAlchemy async database URL |
+| `REDIS_URL` | Redis URL for cache, rate limit state, and jobs; `memory://` is supported for local development |
+| `CORS_ORIGINS` | Comma-separated allowed frontend origins |
+| `LLM_API_KEY` | API key for the OpenAI-compatible provider |
+| `LLM_API_BASE` | Provider base URL, DeepSeek-compatible by default |
+| `LLM_MODEL` | Primary model name, currently configured for `deepseek-v4-flash` in development |
+| `LLM_FALLBACK_MODEL` | Optional fallback model |
+| `AMAP_API_KEY` | AMap API key; placeholder values use local demo fallback data in development |
+| `QWEATHER_API_KEY` | QWeather API key; placeholder values use weather fallback behavior in development |
+| `JWT_SECRET` | Secret used to sign tokens |
+| `TRUSTED_PROXIES` | Trusted proxy CIDRs for production deployments |
 
 ## Testing
 
@@ -302,28 +407,42 @@ pytest tests/test_api
 pytest --cov=app
 ```
 
-Frontend type and production-build checks:
+Frontend build and e2e checks:
 
 ```bash
 cd frontend
 npm run build
+npm run test:e2e
 ```
 
-## Design Notes
+## Deployment Notes
+
+- `docker-compose.yml` is suitable for local infrastructure and backend development.
+- `docker-compose.prod.yml` includes frontend, backend, worker, Nginx, PostgreSQL, and Redis.
+- `k8s/` contains manifests for namespace, config, secrets, deployments, services, ingress, HPA, PostgreSQL, and Redis.
+- `nginx/nginx.conf` provides a reverse proxy entry point for production Compose.
+- `monitoring/grafana-dashboard.json` contains a dashboard artifact for runtime visibility.
+- `loadtest/` contains load-test documentation and assets.
+
+## Design Principles
 
 - API routers are intentionally thin; business workflows live in services and agents.
 - Conversation state is persisted separately from generated business artifacts.
 - Runtime tasks and domain events make AI execution inspectable and retryable.
 - The frontend treats AI output as product state, not disposable text.
 - Provider-specific AI calls are isolated behind an OpenAI-compatible service boundary.
+- Frontend transport concerns such as token storage, refresh, retries, and SSE parsing are centralized in one API client.
+- Domain agents return structured results that can be saved, displayed, and reused by normal pages.
+- Infrastructure concerns such as caching, metrics, rate limits, and security headers are centralized.
 
 ## Roadmap
 
-- Add queue-backed asynchronous task execution for long-running agent workflows.
-- Introduce richer observability dashboards for runtime tasks and domain events.
+- Harden background job execution and retry behavior for more long-running workflows.
+- Expand observability dashboards for runtime tasks, domain events, and LLM provider health.
 - Expand recommendation ranking with learned user preferences.
-- Add more robust deployment templates and CI checks.
-- Improve map visualization and itinerary collaboration flows.
+- Improve map visualization, itinerary collaboration, and route comparison flows.
+- Add broader CI coverage for backend tests, frontend builds, and Playwright e2e flows.
+- Add migration and release documentation for production deployments.
 
 ## Contributing
 

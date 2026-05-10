@@ -140,7 +140,7 @@ def _build_maps_url(
     )
 
 
-@router.post("", response_model=RouteResponse)
+@router.post("", summary="Plan route", description="Get directions between origin and destination using Amap. Supports transit/driving/walking modes.", response_model=RouteResponse)
 async def plan_route(
     payload: RouteRequest,
     current_user: User = Depends(get_current_user),
