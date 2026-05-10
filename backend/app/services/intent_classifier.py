@@ -10,7 +10,10 @@ import json
 import re
 from typing import Any
 
+from app.core.logging import get_logger
 from app.services.llm import llm_service
+
+logger = get_logger(__name__)
 
 # ──────────────────────────────────────────────
 # 快速关键词检测（零 LLM 开销路径）
