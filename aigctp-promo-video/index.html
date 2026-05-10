@@ -1,0 +1,815 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #fff8ed;
+        color: #27324a;
+        font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
+      }
+
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 15% 16%, rgba(255, 184, 77, 0.33), transparent 21%),
+          radial-gradient(circle at 84% 18%, rgba(59, 130, 246, 0.2), transparent 24%),
+          radial-gradient(circle at 72% 82%, rgba(47, 191, 113, 0.2), transparent 25%),
+          #fff8ed;
+      }
+
+      .bg-dots {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        opacity: 0.28;
+        background-image: radial-gradient(#ffb84d 2px, transparent 2px);
+        background-size: 42px 42px;
+      }
+
+      .bubble {
+        position: absolute;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 2px solid rgba(39, 50, 74, 0.06);
+        box-shadow: 0 24px 70px rgba(59, 130, 246, 0.13);
+      }
+
+      .bubble.one {
+        width: 250px;
+        height: 250px;
+        left: 82px;
+        top: 700px;
+      }
+
+      .bubble.two {
+        width: 170px;
+        height: 170px;
+        right: 126px;
+        top: 92px;
+      }
+
+      .bubble.three {
+        width: 120px;
+        height: 120px;
+        right: 360px;
+        bottom: 84px;
+      }
+
+      .scene {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        width: 100%;
+        height: 100%;
+        padding: 92px 120px;
+        display: flex;
+        align-items: stretch;
+        justify-content: center;
+        transform: translateX(2000px);
+        pointer-events: none;
+      }
+
+      .scene-content {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        gap: 56px;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .copy {
+        width: 760px;
+        display: flex;
+        flex-direction: column;
+        gap: 28px;
+      }
+
+      .eyebrow {
+        width: fit-content;
+        padding: 12px 22px;
+        border-radius: 999px;
+        background: #ffffff;
+        color: #3b82f6;
+        font-size: 30px;
+        font-weight: 800;
+        box-shadow: 0 16px 38px rgba(59, 130, 246, 0.13);
+      }
+
+      h1,
+      h2 {
+        color: #27324a;
+        font-weight: 900;
+        line-height: 1.06;
+        letter-spacing: 0;
+      }
+
+      h1 {
+        font-size: 104px;
+      }
+
+      h2 {
+        font-size: 82px;
+      }
+
+      .lead {
+        color: #5f6f89;
+        font-size: 36px;
+        line-height: 1.44;
+        font-weight: 600;
+      }
+
+      .phone {
+        width: 520px;
+        height: 890px;
+        border-radius: 54px;
+        padding: 24px;
+        background: #27324a;
+        box-shadow: 0 50px 110px rgba(39, 50, 74, 0.25);
+      }
+
+      .screen {
+        width: 100%;
+        height: 100%;
+        border-radius: 38px;
+        padding: 30px;
+        overflow: hidden;
+        background: linear-gradient(180deg, #fff 0%, #f5f9ff 100%);
+        display: flex;
+        flex-direction: column;
+        gap: 22px;
+      }
+
+      .status {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: #6f7a8f;
+        font-family: "SF Mono", Consolas, monospace;
+        font-size: 22px;
+        font-weight: 800;
+      }
+
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+      }
+
+      .pill {
+        border-radius: 999px;
+        padding: 12px 18px;
+        background: #eef5ff;
+        color: #2760c7;
+        font-size: 24px;
+        font-weight: 800;
+      }
+
+      .message {
+        border-radius: 28px;
+        padding: 22px 24px;
+        font-size: 27px;
+        line-height: 1.35;
+        font-weight: 700;
+        box-shadow: 0 18px 34px rgba(39, 50, 74, 0.08);
+      }
+
+      .message.user {
+        margin-left: 60px;
+        background: #dbeafe;
+        color: #16428f;
+      }
+
+      .message.ai {
+        margin-right: 28px;
+        background: white;
+        color: #27324a;
+        border: 2px solid #e8edf5;
+      }
+
+      .result-mini {
+        margin-top: auto;
+        border-radius: 28px;
+        padding: 22px;
+        background: #fff4df;
+        border: 2px solid rgba(255, 184, 77, 0.45);
+      }
+
+      .result-mini strong {
+        display: block;
+        font-size: 30px;
+        margin-bottom: 8px;
+      }
+
+      .result-mini span {
+        color: #8a6424;
+        font-size: 22px;
+        font-weight: 700;
+      }
+
+      .orbit {
+        position: relative;
+        width: 760px;
+        height: 760px;
+      }
+
+      .center-badge {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 310px;
+        height: 310px;
+        transform: translate(-50%, -50%);
+        border-radius: 54px;
+        background: #ffffff;
+        box-shadow: 0 36px 86px rgba(39, 50, 74, 0.18);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .spark {
+        width: 108px;
+        height: 108px;
+        border-radius: 34px;
+        background: #ffb84d;
+        display: grid;
+        place-items: center;
+        color: #27324a;
+        font-size: 58px;
+        font-weight: 900;
+      }
+
+      .center-badge b {
+        font-size: 44px;
+      }
+
+      .orbit-card {
+        position: absolute;
+        width: 260px;
+        min-height: 150px;
+        padding: 24px;
+        border-radius: 32px;
+        background: rgba(255, 255, 255, 0.9);
+        box-shadow: 0 24px 52px rgba(39, 50, 74, 0.12);
+        border: 2px solid rgba(39, 50, 74, 0.05);
+      }
+
+      .orbit-card .icon {
+        width: 54px;
+        height: 54px;
+        border-radius: 18px;
+        display: grid;
+        place-items: center;
+        margin-bottom: 18px;
+        color: #27324a;
+        font-size: 30px;
+        font-weight: 900;
+      }
+
+      .orbit-card b {
+        display: block;
+        font-size: 31px;
+        margin-bottom: 8px;
+      }
+
+      .orbit-card span {
+        color: #6f7a8f;
+        font-size: 22px;
+        font-weight: 700;
+      }
+
+      .travel {
+        left: 62px;
+        top: 66px;
+      }
+
+      .food {
+        right: 10px;
+        top: 112px;
+      }
+
+      .diet {
+        left: 6px;
+        bottom: 90px;
+      }
+
+      .shop {
+        right: 70px;
+        bottom: 36px;
+      }
+
+      .path-wrap {
+        width: 850px;
+        height: 680px;
+        border-radius: 54px;
+        background: #ffffff;
+        box-shadow: 0 40px 90px rgba(39, 50, 74, 0.15);
+        padding: 54px;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .map-grid {
+        position: absolute;
+        inset: 0;
+        opacity: 0.42;
+        background:
+          linear-gradient(90deg, #eaf1fb 2px, transparent 2px),
+          linear-gradient(#eaf1fb 2px, transparent 2px);
+        background-size: 64px 64px;
+      }
+
+      .route-svg {
+        position: absolute;
+        left: 80px;
+        top: 116px;
+        width: 690px;
+        height: 440px;
+      }
+
+      .pin {
+        position: absolute;
+        width: 86px;
+        height: 86px;
+        border-radius: 28px 28px 28px 8px;
+        transform: rotate(-45deg);
+        background: #ff6b7a;
+        box-shadow: 0 18px 34px rgba(255, 107, 122, 0.26);
+      }
+
+      .pin::after {
+        content: "";
+        position: absolute;
+        inset: 22px;
+        border-radius: 999px;
+        background: white;
+      }
+
+      .pin.one {
+        left: 122px;
+        top: 380px;
+      }
+
+      .pin.two {
+        right: 176px;
+        top: 138px;
+        background: #3b82f6;
+      }
+
+      .schedule {
+        position: absolute;
+        left: 84px;
+        bottom: 70px;
+        right: 84px;
+        display: flex;
+        gap: 18px;
+      }
+
+      .step {
+        flex: 1;
+        padding: 18px;
+        border-radius: 24px;
+        background: rgba(255, 248, 237, 0.92);
+        font-size: 24px;
+        font-weight: 800;
+        color: #27324a;
+      }
+
+      .cards-stack {
+        width: 850px;
+        height: 690px;
+        position: relative;
+      }
+
+      .feature-card {
+        position: absolute;
+        width: 430px;
+        min-height: 258px;
+        padding: 30px;
+        border-radius: 36px;
+        background: white;
+        box-shadow: 0 32px 74px rgba(39, 50, 74, 0.14);
+      }
+
+      .feature-card h3 {
+        font-size: 38px;
+        line-height: 1.14;
+        margin-bottom: 18px;
+      }
+
+      .feature-card p {
+        color: #6f7a8f;
+        font-size: 25px;
+        line-height: 1.35;
+        font-weight: 700;
+      }
+
+      .feature-card small {
+        display: inline-block;
+        margin-top: 24px;
+        padding: 10px 16px;
+        border-radius: 999px;
+        font-size: 20px;
+        font-weight: 900;
+        color: #27324a;
+      }
+
+      .restaurant-card {
+        left: 18px;
+        top: 26px;
+        border: 3px solid rgba(255, 107, 122, 0.18);
+      }
+
+      .diet-card {
+        right: 24px;
+        top: 190px;
+        border: 3px solid rgba(47, 191, 113, 0.18);
+      }
+
+      .commerce-card {
+        left: 96px;
+        bottom: 18px;
+        border: 3px solid rgba(255, 184, 77, 0.28);
+      }
+
+      .dashboard {
+        width: 880px;
+        height: 650px;
+        border-radius: 48px;
+        background: #ffffff;
+        box-shadow: 0 42px 100px rgba(39, 50, 74, 0.16);
+        padding: 38px;
+        display: grid;
+        grid-template-columns: 1.15fr 0.85fr;
+        gap: 24px;
+      }
+
+      .panel {
+        border-radius: 32px;
+        background: #f6f9fe;
+        padding: 28px;
+        overflow: hidden;
+      }
+
+      .panel h3 {
+        font-size: 34px;
+        margin-bottom: 18px;
+      }
+
+      .bar {
+        height: 32px;
+        border-radius: 999px;
+        background: #dce8fb;
+        margin: 24px 0;
+        overflow: hidden;
+      }
+
+      .bar span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: #3b82f6;
+      }
+
+      .log-row {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 16px 0;
+        border-bottom: 2px solid #e8edf5;
+        color: #5f6f89;
+        font-size: 24px;
+        font-weight: 800;
+      }
+
+      .dot {
+        width: 18px;
+        height: 18px;
+        border-radius: 999px;
+        background: #2fbf71;
+      }
+
+      .final-grid {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 56px;
+        align-items: center;
+      }
+
+      .final-card {
+        border-radius: 56px;
+        background: white;
+        padding: 56px;
+        box-shadow: 0 40px 100px rgba(39, 50, 74, 0.16);
+      }
+
+      .logo-mark {
+        width: 150px;
+        height: 150px;
+        border-radius: 44px;
+        background: #ffb84d;
+        display: grid;
+        place-items: center;
+        color: #27324a;
+        font-size: 74px;
+        font-weight: 900;
+        margin-bottom: 34px;
+      }
+
+      .final-card h2 {
+        font-size: 90px;
+      }
+
+      .tagline {
+        margin-top: 26px;
+        color: #5f6f89;
+        font-size: 34px;
+        line-height: 1.42;
+        font-weight: 700;
+      }
+
+      .checklist {
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
+
+      .check {
+        border-radius: 30px;
+        padding: 26px 30px;
+        background: rgba(255, 255, 255, 0.82);
+        box-shadow: 0 24px 58px rgba(39, 50, 74, 0.1);
+        font-size: 32px;
+        font-weight: 900;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+      }
+
+      .check span {
+        width: 46px;
+        height: 46px;
+        border-radius: 16px;
+        display: grid;
+        place-items: center;
+        background: #fff0cd;
+        color: #27324a;
+        border: 2px solid rgba(255, 184, 77, 0.55);
+        font-size: 28px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="30" data-width="1920" data-height="1080">
+      <div class="bg-dots" data-layout-ignore></div>
+      <div class="bubble one" data-layout-ignore></div>
+      <div class="bubble two" data-layout-ignore></div>
+      <div class="bubble three" data-layout-ignore></div>
+
+      <section class="scene scene-1" data-layout-allow-overflow>
+        <div class="scene-content">
+          <div class="copy">
+            <div class="eyebrow">AIGCTP · AI 生活推荐与规划系统</div>
+            <h1>把日常选择<br />交给一个聪明入口</h1>
+            <p class="lead">一句话说出需求，AI 自动理解场景，帮你规划旅行、选餐厅、管饮食、找商品。</p>
+          </div>
+          <div class="phone">
+            <div class="screen">
+              <div class="status"><span>09:30</span><span>AIGCTP</span></div>
+              <div class="pill-row">
+                <span class="pill">行程</span>
+                <span class="pill">餐厅</span>
+                <span class="pill">饮食</span>
+                <span class="pill">购物</span>
+              </div>
+              <div class="message user">周末想去杭州，两天一夜，顺便找家清淡餐厅。</div>
+              <div class="message ai">收到，我会一起考虑路线、天气、口味和预算。</div>
+              <div class="result-mini">
+                <strong>正在生成可执行结果</strong>
+                <span>行程卡片 · 餐厅推荐 · 后续追问上下文</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="scene scene-2" data-layout-allow-overflow>
+        <div class="scene-content">
+          <div class="copy">
+            <div class="eyebrow">多智能体协作</div>
+            <h2>不是聊天机器人，<br />是生活任务调度台</h2>
+            <p class="lead">Supervisor 识别意图，Dispatcher 分发到旅行、餐厅、饮食和电商智能体，结果同步成业务数据。</p>
+          </div>
+          <div class="orbit">
+            <div class="center-badge">
+              <div class="spark">AI</div>
+              <b>统一入口</b>
+            </div>
+            <div class="orbit-card travel">
+              <div class="icon" style="background:#dbeafe">路</div>
+              <b>行程规划</b>
+              <span>路线、天气、历史恢复</span>
+            </div>
+            <div class="orbit-card food">
+              <div class="icon" style="background:#ffe3e7">餐</div>
+              <b>餐厅推荐</b>
+              <span>城市、口味、附近选择</span>
+            </div>
+            <div class="orbit-card diet">
+              <div class="icon" style="background:#ddf8e9">养</div>
+              <b>饮食健康</b>
+              <span>档案、记录、营养分析</span>
+            </div>
+            <div class="orbit-card shop">
+              <div class="icon" style="background:#fff0cd">购</div>
+              <b>商品订单</b>
+              <span>推荐、加购、再次下单</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="scene scene-3" data-layout-allow-overflow>
+        <div class="scene-content">
+          <div class="path-wrap">
+            <div class="map-grid"></div>
+            <svg class="route-svg" viewBox="0 0 690 440" fill="none" aria-hidden="true">
+              <path class="route-path" d="M70 350 C160 230 220 270 290 190 C365 104 450 155 590 70" stroke="#3b82f6" stroke-width="22" stroke-linecap="round" stroke-dasharray="24 32" />
+              <path class="route-solid" d="M70 350 C160 230 220 270 290 190 C365 104 450 155 590 70" stroke="#ffb84d" stroke-width="10" stroke-linecap="round" />
+            </svg>
+            <div class="pin one"></div>
+            <div class="pin two"></div>
+            <div class="schedule">
+              <div class="step">Day 1 · 西湖散步</div>
+              <div class="step">Day 2 · 博物馆</div>
+              <div class="step">晚餐 · 清淡江浙菜</div>
+            </div>
+          </div>
+          <div class="copy">
+            <div class="eyebrow">从文本到行动</div>
+            <h2>推荐结果会保存，<br />也能继续操作</h2>
+            <p class="lead">行程可确认，路线可查看，餐厅可选择，下一轮对话还记得你刚才的计划。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="scene scene-4" data-layout-allow-overflow>
+        <div class="scene-content">
+          <div class="copy">
+            <div class="eyebrow">跨场景生活服务</div>
+            <h2>从“想吃什么”<br />到“买些什么”</h2>
+            <p class="lead">餐厅、饮食计划、商品推荐和购物车不再散落在不同应用里，AI 直接把结果推到可用页面。</p>
+          </div>
+          <div class="cards-stack">
+            <article class="feature-card restaurant-card">
+              <h3>餐厅推荐已同步</h3>
+              <p>按城市、口味和距离筛选，保留在会话上下文里继续追问。</p>
+              <small style="background:#ffe3e7">4 个推荐</small>
+            </article>
+            <article class="feature-card diet-card">
+              <h3>饮食计划已保存</h3>
+              <p>结合健康档案、每日记录和营养分析，生成可查看的计划。</p>
+              <small style="background:#ddf8e9">营养均衡</small>
+            </article>
+            <article class="feature-card commerce-card">
+              <h3>商品进入购物车</h3>
+              <p>从对话识别加购、复购和订单动作，让推荐真的完成闭环。</p>
+              <small style="background:#fff0cd">一键下单</small>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="scene scene-5" data-layout-allow-overflow>
+        <div class="scene-content">
+          <div class="dashboard">
+            <div class="panel">
+              <h3>推荐反馈</h3>
+              <div class="bar"><span style="width:82%"></span></div>
+              <div class="bar"><span style="width:64%;background:#ff6b7a"></span></div>
+              <div class="bar"><span style="width:74%;background:#2fbf71"></span></div>
+              <div class="log-row"><span class="dot"></span>喜欢的餐厅口味已学习</div>
+              <div class="log-row"><span class="dot"></span>历史行程可恢复</div>
+              <div class="log-row"><span class="dot"></span>失败任务可查询重试</div>
+            </div>
+            <div class="panel">
+              <h3>工程底座</h3>
+              <div class="log-row"><span class="dot" style="background:#3b82f6"></span>FastAPI 服务层</div>
+              <div class="log-row"><span class="dot" style="background:#ffb84d"></span>会话与业务结果持久化</div>
+              <div class="log-row"><span class="dot" style="background:#ff6b7a"></span>SSE 流式响应</div>
+              <div class="log-row"><span class="dot"></span>JWT 与运行时记录</div>
+            </div>
+          </div>
+          <div class="copy">
+            <div class="eyebrow">可沉淀，可演进</div>
+            <h2>每次推荐，<br />都变成下一次更懂你</h2>
+            <p class="lead">历史对话、偏好、反馈和运行事件持续积累，让系统从演示走向可维护的生活服务平台。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="scene scene-6" data-layout-allow-overflow>
+        <div class="final-grid">
+          <div class="final-card">
+            <div class="logo-mark">A</div>
+            <h2>AIGCTP</h2>
+            <p class="tagline">一个入口，连接旅行、餐厅、健康饮食与 AI 购物。让生活决策更轻松，也更可执行。</p>
+          </div>
+          <div class="checklist">
+            <div class="check"><span>✓</span>自然语言理解需求</div>
+            <div class="check"><span>✓</span>多智能体协作推荐</div>
+            <div class="check"><span>✓</span>结构化结果可继续操作</div>
+            <div class="check"><span>✓</span>偏好和历史持续沉淀</div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+
+      gsap.set(".scene-1", { x: 0 });
+      gsap.set([".scene-2", ".scene-3", ".scene-4", ".scene-5", ".scene-6"], { x: 2000 });
+      gsap.set(".route-solid", { strokeDasharray: 900, strokeDashoffset: 900 });
+
+      tl.to(".bg-dots", { x: 30, y: 18, duration: 30, ease: "none" }, 0);
+      tl.to(".bubble.one", { scale: 1.08, y: -20, duration: 6, repeat: 4, yoyo: true, ease: "sine.inOut" }, 0);
+      tl.to(".bubble.two", { scale: 0.92, x: -24, duration: 5, repeat: 5, yoyo: true, ease: "sine.inOut" }, 0);
+      tl.to(".bubble.three", { scale: 1.12, x: 18, y: 16, duration: 4, repeat: 7, yoyo: true, ease: "sine.inOut" }, 0);
+
+      function enterScene(selector, at) {
+        tl.to(selector, { x: 0, duration: 0.55, ease: "power3.out" }, at);
+      }
+
+      function exitScene(selector, at) {
+        tl.to(selector, { x: -2000, duration: 0.55, ease: "power3.in" }, at);
+      }
+
+      tl.from(".scene-1 .eyebrow", { y: 26, opacity: 0, duration: 0.45, ease: "back.out(1.7)" }, 0.15);
+      tl.from(".scene-1 h1", { y: 46, opacity: 0, duration: 0.55, ease: "power3.out" }, 0.35);
+      tl.from(".scene-1 .lead", { y: 32, opacity: 0, duration: 0.48, ease: "power3.out" }, 0.65);
+      tl.from(".phone", { x: 120, rotate: 4, opacity: 0, duration: 0.7, ease: "back.out(1.25)" }, 0.45);
+      tl.from(".scene-1 .pill", { y: 18, opacity: 0, stagger: 0.08, duration: 0.32, ease: "power2.out" }, 1.1);
+      tl.from(".scene-1 .message", { y: 28, opacity: 0, stagger: 0.22, duration: 0.42, ease: "power3.out" }, 1.45);
+      tl.from(".result-mini", { scale: 0.86, opacity: 0, duration: 0.45, ease: "back.out(1.8)" }, 2.25);
+      exitScene(".scene-1", 4.55);
+
+      enterScene(".scene-2", 4.6);
+      tl.from(".scene-2 .copy > *", { x: -42, opacity: 0, stagger: 0.13, duration: 0.48, ease: "power3.out" }, 4.85);
+      tl.from(".center-badge", { scale: 0.72, rotation: -6, opacity: 0, duration: 0.62, ease: "back.out(1.7)" }, 5.05);
+      tl.from(".orbit-card", { scale: 0.78, y: 34, opacity: 0, stagger: 0.12, duration: 0.48, ease: "back.out(1.6)" }, 5.45);
+      tl.to(".orbit-card", { y: -8, duration: 1.6, repeat: 2, yoyo: true, stagger: 0.1, ease: "sine.inOut" }, 6.35);
+      exitScene(".scene-2", 9.45);
+
+      enterScene(".scene-3", 9.5);
+      tl.from(".path-wrap", { x: -80, scale: 0.95, opacity: 0, duration: 0.62, ease: "power3.out" }, 9.78);
+      tl.from(".scene-3 .copy > *", { x: 46, opacity: 0, stagger: 0.12, duration: 0.5, ease: "power3.out" }, 10.05);
+      tl.to(".route-solid", { strokeDashoffset: 0, duration: 1.6, ease: "power2.inOut" }, 10.28);
+      tl.from(".pin", { y: -80, scale: 0.4, opacity: 0, stagger: 0.28, duration: 0.48, ease: "bounce.out" }, 11.1);
+      tl.from(".step", { y: 24, opacity: 0, stagger: 0.12, duration: 0.42, ease: "power2.out" }, 11.65);
+      exitScene(".scene-3", 14.35);
+
+      enterScene(".scene-4", 14.4);
+      tl.from(".scene-4 .copy > *", { y: 32, opacity: 0, stagger: 0.13, duration: 0.48, ease: "power3.out" }, 14.72);
+      tl.from(".feature-card", { y: 70, rotation: -3, opacity: 0, stagger: 0.18, duration: 0.58, ease: "back.out(1.4)" }, 15.12);
+      tl.to(".feature-card", { y: -10, duration: 1.4, repeat: 2, yoyo: true, stagger: 0.08, ease: "sine.inOut" }, 16.3);
+      exitScene(".scene-4", 19.25);
+
+      enterScene(".scene-5", 19.3);
+      tl.from(".dashboard", { y: 64, scale: 0.96, opacity: 0, duration: 0.58, ease: "power3.out" }, 19.62);
+      tl.from(".scene-5 .copy > *", { x: 46, opacity: 0, stagger: 0.12, duration: 0.5, ease: "power3.out" }, 19.94);
+      tl.from(".bar span", { width: 0, stagger: 0.12, duration: 0.7, ease: "power2.out" }, 20.45);
+      tl.from(".log-row", { x: -22, opacity: 0, stagger: 0.07, duration: 0.34, ease: "power2.out" }, 21.0);
+      exitScene(".scene-5", 24.15);
+
+      enterScene(".scene-6", 24.2);
+      tl.from(".final-card", { y: 58, scale: 0.95, opacity: 0, duration: 0.58, ease: "power3.out" }, 24.48);
+      tl.from(".logo-mark", { rotation: -10, scale: 0.66, opacity: 0, duration: 0.5, ease: "back.out(1.8)" }, 24.78);
+      tl.from(".check", { x: 64, opacity: 0, stagger: 0.16, duration: 0.46, ease: "back.out(1.3)" }, 25.08);
+      tl.to(".logo-mark", { scale: 1.05, duration: 0.7, repeat: 4, yoyo: true, ease: "sine.inOut" }, 26.1);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

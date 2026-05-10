@@ -132,7 +132,7 @@ async def recommend_diet(
                 status="active" if wants_active else "draft",
             )
             db.add(plan)
-            await db.commit()
+            await db.flush()
             await db.refresh(plan)
         except Exception as e:
             logger.warning("Failed to save diet plan: %s", e)
@@ -318,7 +318,7 @@ async def log_meal(
                 notes=result.get("notes", ""),
             )
             db.add(record)
-        await db.commit()
+        await db.flush()
         await db.refresh(record)
     except Exception as e:
         logger.warning("Failed to save meal record: %s", e)

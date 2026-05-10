@@ -12,11 +12,8 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.database import _utcnow
 from app.models.runtime import DomainEvent, TaskRun
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 async def create_task_run(

@@ -92,9 +92,50 @@ def mock_external_services(monkeypatch):
     async def mock_extract_json(*args, **kwargs):
         return {"intent": "general_chat", "extracted_info": {}}
 
+    async def mock_chat_with_artifact(*args, **kwargs):
+        return {
+            "text": "这是一个测试回复内容。",
+            "artifact": {
+                "destination": "北京",
+                "days": 2,
+                "theme": "测试行程",
+                "day_by_day": [
+                    {
+                        "day": 1,
+                        "theme": "第一天测试",
+                        "weather": {"condition": "晴", "temp_min": "18", "temp_max": "28"},
+                        "meals": [],
+                        "activities": [
+                            {"time": "上午", "poi": "故宫博物院", "duration": "2小时"},
+                            {"time": "下午", "poi": "雍和宫", "duration": "2小时"},
+                        ],
+                        "shopping": [],
+                        "hotel": {},
+                        "transport_tips": "",
+                    },
+                    {
+                        "day": 2,
+                        "theme": "第二天测试",
+                        "weather": {"condition": "晴", "temp_min": "18", "temp_max": "28"},
+                        "meals": [],
+                        "activities": [
+                            {"time": "上午", "poi": "颐和园", "duration": "2小时"},
+                            {"time": "下午", "poi": "圆明园", "duration": "2小时"},
+                        ],
+                        "shopping": [],
+                        "hotel": {},
+                        "transport_tips": "",
+                    },
+                ],
+                "budget_estimate": {"total": "待定"},
+                "tips": [],
+            },
+        }
+
     monkeypatch.setattr("app.services.llm.llm_service.chat", mock_chat)
     monkeypatch.setattr("app.services.llm.llm_service.chat_stream", mock_chat_stream)
     monkeypatch.setattr("app.services.llm.llm_service.extract_json", mock_extract_json)
+    monkeypatch.setattr("app.services.llm.llm_service.chat_with_artifact", mock_chat_with_artifact)
 
     async def mock_search_poi(*args, **kwargs):
         return [{

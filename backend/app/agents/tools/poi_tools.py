@@ -3,6 +3,7 @@ import json
 from typing import Optional
 
 from app.services.amap import amap_service
+from app.services.demo_places import demo_restaurants, demo_scenic_spots, has_real_amap_key
 from app.models.cache import CachedPOI
 from app.core.cache import get_list, set_list
 from app.core.config import settings
@@ -47,6 +48,11 @@ async def search_pois(
     limit: int = 20,
 ) -> list[dict]:
     """搜索景点/POI，优先查缓存"""
+    if not has_real_amap_key(settings.AMAP_API_KEY):
+        if category == "风景名胜" or keywords == "景点":
+            return demo_scenic_spots(city or keywords, limit)
+        return []
+
     # Try Redis cache first
     cache_key = f"poi:search:{city or ''}:{keywords}:{category or ''}:{limit}"
     cached = await get_list(cache_key)
@@ -114,7 +120,7 @@ async def search_pois(
             ))
 
     if cached_new:
-        await db.commit()
+        await db.flush()
 
     # Write to Redis cache once after the loop
     await set_list(cache_key, pois[:limit], ttl=settings.REDIS_TTL_POI)
@@ -133,10 +139,18 @@ async def search_restaurants(
     cuisine: Optional[str] = None,
     limit: int = 10,
 ) -> list[dict]:
-    """搜索餐厅"""
+    """搜索餐厅（带 Redis 缓存）"""
     keywords = cuisine if cuisine else "美食"
-    pois = await amap_service.search_restaurants(city, keywords=keywords, page_size=limit)
-    return [
+    cache_key = f"restaurant:search:{city}:{keywords}:{limit}"
+    cached = await get_list(cache_key)
+    if cached:
+        return cached[:limit]
+
+    try:
+        pois = await amap_service.search_restaurants(city, keywords=keywords, page_size=limit)
+    except Exception:
+        pois = demo_restaurants(city, cuisine, limit)
+    result = [
         {
             "name": p["name"],
             "address": p.get("address", ""),
@@ -149,12 +163,20 @@ async def search_restaurants(
         }
         for p in pois
     ]
+    if result:
+        await set_list(cache_key, result[:limit], ttl=settings.REDIS_TTL_RESTAURANT)
+    return result
 
 
 async def search_hotels(db: AsyncSession, city: str, limit: int = 10) -> list[dict]:
-    """搜索酒店"""
+    """搜索酒店（带 Redis 缓存）"""
+    cache_key = f"hotel:search:{city}:{limit}"
+    cached = await get_list(cache_key)
+    if cached:
+        return cached[:limit]
+
     pois = await amap_service.search_hotels(city, page_size=limit)
-    return [
+    result = [
         {
             "name": p["name"],
             "address": p.get("address", ""),
@@ -165,6 +187,9 @@ async def search_hotels(db: AsyncSession, city: str, limit: int = 10) -> list[di
         }
         for p in pois
     ]
+    if result:
+        await set_list(cache_key, result[:limit], ttl=settings.REDIS_TTL_POI)
+    return result
 
 
 async def get_route(

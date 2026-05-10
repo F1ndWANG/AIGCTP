@@ -39,7 +39,7 @@ router = APIRouter(prefix="/commerce", tags=["commerce"])
 # ==================== Categories ====================
 
 
-@router.get("/categories", response_model=list[CategoryResponse])
+@router.get("/categories", summary="List categories", response_model=list[CategoryResponse])
 async def list_categories(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -49,7 +49,7 @@ async def list_categories(
     return [CategoryResponse.model_validate(c) for c in categories if c is not None]
 
 
-@router.post("/categories", response_model=CategoryResponse, status_code=201)
+@router.post("/categories", summary="Create category", response_model=CategoryResponse, status_code=201)
 async def create_category(
     payload: CategoryCreateRequest,
     current_user: User = Depends(get_current_user),
@@ -65,7 +65,7 @@ async def create_category(
 # ==================== Products ====================
 
 
-@router.get("/products")
+@router.get("/products", summary="List products")
 async def list_products(
     category_id: Optional[int] = Query(None),
     keyword: Optional[str] = Query(None),
@@ -109,7 +109,7 @@ async def list_products(
     }
 
 
-@router.get("/products/{product_id}", response_model=ProductResponse)
+@router.get("/products/{product_id}", summary="Get product detail", response_model=ProductResponse)
 async def get_product(
     product_id: int,
     current_user: User = Depends(get_current_user),
@@ -122,7 +122,7 @@ async def get_product(
     return ProductResponse.model_validate(product)
 
 
-@router.post("/products", response_model=ProductResponse, status_code=201)
+@router.post("/products", summary="Create product", response_model=ProductResponse, status_code=201)
 async def create_product(
     payload: ProductRequest,
     current_user: User = Depends(get_current_user),
@@ -158,7 +158,7 @@ def _build_cart_response(cart: Cart) -> CartResponse:
     items = []
     total = 0.0
     for item in cart.items:
-        price = item.product.price if item.product else 0
+        price = float(item.product.price) if item.product and item.product.price is not None else 0.0
         total += price * item.quantity
         items.append(CartItemResponse(
             id=item.id,
@@ -180,7 +180,7 @@ def _build_cart_response(cart: Cart) -> CartResponse:
     )
 
 
-@router.get("/cart", response_model=CartResponse)
+@router.get("/cart", summary="Get cart", response_model=CartResponse)
 async def get_cart(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -189,7 +189,7 @@ async def get_cart(
     return _build_cart_response(cart)
 
 
-@router.post("/cart/items", response_model=CartItemResponse, status_code=201)
+@router.post("/cart/items", summary="Add item to cart", response_model=CartItemResponse, status_code=201)
 async def add_cart_item(
     payload: AddCartItemRequest,
     current_user: User = Depends(get_current_user),
@@ -232,7 +232,7 @@ async def add_cart_item(
         product_id=item.product_id,
         product_name=product.name,
         product_image=product.image_urls[0] if product.image_urls else "",
-        price=product.price,
+        price=float(product.price),
         unit=product.unit,
         quantity=item.quantity,
         specs=item.specs or {},
@@ -240,7 +240,7 @@ async def add_cart_item(
     )
 
 
-@router.put("/cart/items/{item_id}", response_model=CartItemResponse)
+@router.put("/cart/items/{item_id}", summary="Update cart item", response_model=CartItemResponse)
 async def update_cart_item(
     item_id: int,
     payload: UpdateCartItemRequest,
@@ -264,7 +264,7 @@ async def update_cart_item(
         product_id=item.product_id,
         product_name=product.name if product else "",
         product_image=product.image_urls[0] if product and product.image_urls else "",
-        price=product.price if product else 0,
+        price=float(product.price) if product and product.price is not None else 0,
         unit=product.unit if product else "",
         quantity=item.quantity,
         specs=item.specs or {},
@@ -272,7 +272,7 @@ async def update_cart_item(
     )
 
 
-@router.delete("/cart/items/{item_id}", status_code=204)
+@router.delete("/cart/items/{item_id}", summary="Remove cart item", status_code=204)
 async def remove_cart_item(
     item_id: int,
     current_user: User = Depends(get_current_user),
@@ -342,12 +342,12 @@ async def create_order(
         order_items.append({
             "product_id": product.id,
             "name": product.name,
-            "price": product.price,
+            "price": float(product.price),
             "quantity": item.quantity,
             "specs": item.specs or {},
             "image_url": product.image_urls[0] if product.image_urls else "",
         })
-        total += product.price * item.quantity
+        total += float(product.price) * item.quantity
 
     order = Order(
         user_id=current_user.id,
@@ -371,7 +371,7 @@ async def create_order(
     return _build_order_response(order)
 
 
-@router.get("/orders", response_model=list[OrderListItem])
+@router.get("/orders", summary="List orders", response_model=list[OrderListItem])
 async def list_orders(
     status: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
@@ -402,7 +402,7 @@ async def list_orders(
     return items
 
 
-@router.get("/orders/{order_id}", response_model=OrderResponse)
+@router.get("/orders/{order_id}", summary="Get order detail", response_model=OrderResponse)
 async def get_order(
     order_id: int,
     current_user: User = Depends(get_current_user),
@@ -499,7 +499,7 @@ async def update_order_status(
     return _build_order_response(order)
 
 
-@router.post("/orders/{order_id}/cancel", response_model=OrderResponse)
+@router.post("/orders/{order_id}/cancel", summary="Cancel order", response_model=OrderResponse)
 async def cancel_order(
     order_id: int,
     current_user: User = Depends(get_current_user),

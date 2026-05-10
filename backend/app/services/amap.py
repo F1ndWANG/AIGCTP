@@ -7,6 +7,7 @@ from typing import Optional
 import httpx
 
 from app.core.config import settings
+from app.services.demo_places import demo_restaurants, has_real_amap_key
 
 
 class AmapService:
@@ -17,6 +18,8 @@ class AmapService:
         self.client = httpx.AsyncClient(timeout=10.0)
 
     async def _get(self, path: str, params: dict) -> dict:
+        if not has_real_amap_key(self.api_key):
+            raise Exception("Amap API key is not configured")
         params["key"] = self.api_key
         resp = await self.client.get(f"{self.BASE_URL}{path}", params=params)
         data = resp.json()
@@ -107,6 +110,8 @@ class AmapService:
         page_size: int = 20,
     ) -> list[dict]:
         """搜索餐厅"""
+        if not has_real_amap_key(self.api_key):
+            return demo_restaurants(city, keywords, page_size)
         types = "餐饮服务"
         if keywords:
             return await self.search_poi(keywords, city=city, types=types, page_size=page_size)

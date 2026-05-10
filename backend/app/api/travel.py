@@ -11,7 +11,7 @@ from app.schemas.travel import TravelPlanResponse, TravelPlanListItem
 router = APIRouter(prefix="/travel", tags=["travel"])
 
 
-@router.get("/plans", response_model=list[TravelPlanListItem])
+@router.get("/plans", summary="List travel plans", response_model=list[TravelPlanListItem])
 async def list_plans(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -26,7 +26,7 @@ async def list_plans(
     return [TravelPlanListItem.model_validate(p) for p in plans]
 
 
-@router.get("/plans/{plan_id}", response_model=TravelPlanResponse)
+@router.get("/plans/{plan_id}", summary="Get travel plan detail", response_model=TravelPlanResponse)
 async def get_plan(
     plan_id: int,
     current_user: User = Depends(get_current_user),
@@ -41,7 +41,7 @@ async def get_plan(
     return TravelPlanResponse.model_validate(plan)
 
 
-@router.post("/plans/{plan_id}/confirm", response_model=TravelPlanResponse)
+@router.post("/plans/{plan_id}/confirm", summary="Confirm travel plan", response_model=TravelPlanResponse)
 async def confirm_plan(
     plan_id: int,
     current_user: User = Depends(get_current_user),
@@ -60,7 +60,7 @@ async def confirm_plan(
     return TravelPlanResponse.model_validate(plan)
 
 
-@router.delete("/plans/{plan_id}", status_code=204)
+@router.delete("/plans/{plan_id}", summary="Delete travel plan", status_code=204)
 async def delete_plan(
     plan_id: int,
     current_user: User = Depends(get_current_user),

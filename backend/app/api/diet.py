@@ -24,7 +24,7 @@ router = APIRouter(prefix="/diet", tags=["diet"])
 # --- Health Profile ---
 
 
-@router.get("/profile", response_model=HealthProfileResponse)
+@router.get("/profile", summary="Get health profile", response_model=HealthProfileResponse)
 async def get_health_profile(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -38,7 +38,7 @@ async def get_health_profile(
     return HealthProfileResponse.model_validate(profile)
 
 
-@router.put("/profile", response_model=HealthProfileResponse)
+@router.put("/profile", summary="Update health profile", response_model=HealthProfileResponse)
 async def update_health_profile(
     payload: HealthProfileRequest,
     current_user: User = Depends(get_current_user),
@@ -76,7 +76,7 @@ async def update_health_profile(
 # --- Meal Records ---
 
 
-@router.get("/meals", response_model=list[MealRecordResponse])
+@router.get("/meals", summary="List meal records", response_model=list[MealRecordResponse])
 async def list_meals(
     meal_date: date | None = None,
     current_user: User = Depends(get_current_user),
@@ -92,7 +92,7 @@ async def list_meals(
     return [MealRecordResponse.model_validate(r) for r in records]
 
 
-@router.get("/meals/summary", response_model=MealRecordListResponse)
+@router.get("/meals/summary", summary="Get meal nutrition summary", response_model=MealRecordListResponse)
 async def get_meal_summary(
     meal_date: date | None = None,
     current_user: User = Depends(get_current_user),
@@ -128,7 +128,7 @@ async def get_meal_summary(
     )
 
 
-@router.post("/meals", response_model=MealRecordResponse, status_code=201)
+@router.post("/meals", summary="Create meal record", response_model=MealRecordResponse, status_code=201)
 async def create_meal(
     payload: MealRecordRequest,
     current_user: User = Depends(get_current_user),
@@ -148,7 +148,7 @@ async def create_meal(
     return MealRecordResponse.model_validate(record)
 
 
-@router.delete("/meals/{meal_id}", status_code=204)
+@router.delete("/meals/{meal_id}", summary="Delete meal record", status_code=204)
 async def delete_meal(
     meal_id: int,
     current_user: User = Depends(get_current_user),
@@ -167,7 +167,7 @@ async def delete_meal(
 # --- Diet Plans ---
 
 
-@router.get("/plans", response_model=list[DietPlanListItem])
+@router.get("/plans", summary="List diet plans", response_model=list[DietPlanListItem])
 async def list_diet_plans(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -182,7 +182,7 @@ async def list_diet_plans(
     return [DietPlanListItem.model_validate(p) for p in plans]
 
 
-@router.get("/plans/{plan_id}", response_model=DietPlanResponse)
+@router.get("/plans/{plan_id}", summary="Get diet plan detail", response_model=DietPlanResponse)
 async def get_diet_plan(
     plan_id: int,
     current_user: User = Depends(get_current_user),
@@ -197,7 +197,7 @@ async def get_diet_plan(
     return DietPlanResponse.model_validate(plan)
 
 
-@router.post("/plans/{plan_id}/confirm", response_model=DietPlanResponse)
+@router.post("/plans/{plan_id}/confirm", summary="Confirm diet plan", response_model=DietPlanResponse)
 async def confirm_diet_plan(
     plan_id: int,
     current_user: User = Depends(get_current_user),
@@ -218,7 +218,7 @@ async def confirm_diet_plan(
     return DietPlanResponse.model_validate(plan)
 
 
-@router.delete("/plans/{plan_id}", status_code=204)
+@router.delete("/plans/{plan_id}", summary="Delete diet plan", status_code=204)
 async def delete_diet_plan(
     plan_id: int,
     current_user: User = Depends(get_current_user),

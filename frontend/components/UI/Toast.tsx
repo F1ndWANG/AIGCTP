@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from "lucide-react";
 
 type ToastVariant = "success" | "error" | "info" | "warning";
 
@@ -42,10 +43,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     [removeToast]
   );
 
+  const variantIcons: Record<ToastVariant, React.ReactNode> = {
+    success: <CheckCircle className="h-4 w-4 shrink-0" />,
+    error: <AlertCircle className="h-4 w-4 shrink-0" />,
+    info: <Info className="h-4 w-4 shrink-0" />,
+    warning: <AlertTriangle className="h-4 w-4 shrink-0" />,
+  };
+
   const variantStyles: Record<ToastVariant, string> = {
     success: "bg-green-600 text-white",
     error: "bg-red-600 text-white",
-    info: "bg-blue-600 text-white",
+    info: "bg-primary text-primary-foreground",
     warning: "bg-yellow-500 text-white",
   };
 
@@ -60,8 +68,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((t) => (
           <div
             key={t.id}
-            className={`pointer-events-auto px-4 py-3 rounded-lg shadow-lg text-sm font-medium animate-slide-in flex items-center gap-3 ${variantStyles[t.variant]}`}
+            className={`pointer-events-auto px-4 py-3 rounded-xl shadow-lg text-sm font-medium animate-slide-in flex items-center gap-3 ${variantStyles[t.variant]}`}
           >
+            {variantIcons[t.variant]}
             <span className="flex-1">{t.message}</span>
             {t.action && (
               <button
@@ -73,9 +82,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             )}
             <button
               onClick={() => removeToast(t.id)}
-              className="text-white/60 hover:text-white ml-1"
+              className="opacity-60 hover:opacity-100 ml-1"
             >
-              ✕
+              <X className="h-3.5 w-3.5" />
             </button>
           </div>
         ))}

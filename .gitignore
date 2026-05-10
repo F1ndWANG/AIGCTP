@@ -2,6 +2,11 @@
 .env
 .env.local
 .env.production
+.env.staging
+.env.backup*
+.env.bak*
+*.key
+*.pem
 
 # ── Logs ──
 *.log
@@ -43,6 +48,11 @@ Thumbs.db
 dist/
 build/
 *.tsbuildinfo
+
+# ── Playwright / E2E ──
+frontend/e2e/.auth/
+frontend/test-results/
+frontend/playwright-report/
 
 # ── Local agent / scratch files ──
 .claude/

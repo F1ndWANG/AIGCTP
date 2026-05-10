@@ -26,66 +26,198 @@ import type {
 
 const API_BASE = "/api";
 
-let token: string | null = null;
+/** Default request timeout in milliseconds */
+const REQUEST_TIMEOUT_MS = 30_000;
+
+/** Maximum retry attempts for retryable errors (5xx, network). */
+const MAX_RETRIES = 2;
+
+/** Delay between retries (ms). Doubles each attempt. */
+const RETRY_BASE_DELAY = 500;
+
+let refreshPromise: Promise<boolean> | null = null;
+
+function formatApiDetail(detail: unknown): string {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object" && "msg" in item) {
+          return String((item as { msg: unknown }).msg);
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join("；") || "请求失败";
+  }
+  if (detail && typeof detail === "object") {
+    if ("message" in detail) return String((detail as { message: unknown }).message);
+    if ("detail" in detail) return formatApiDetail((detail as { detail: unknown }).detail);
+  }
+  return "请求失败";
+}
+
+// ── Token management (cookie-based, no localStorage) ──────────
+
+/** Check if user is authenticated by calling the /auth/me endpoint. */
+export async function checkAuth(): Promise<User | null> {
+  try {
+    return await fetch(`${API_BASE}/auth/me`, { credentials: "include" }).then((r) =>
+      r.ok ? r.json() : null
+    );
+  } catch {
+    return null;
+  }
+}
+
+/** Attempt to refresh the access token via cookie-based endpoint. Returns true on success. */
+async function refreshAccessToken(): Promise<boolean> {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = doRefreshAccessToken().finally(() => {
+    refreshPromise = null;
+  });
+
+  return refreshPromise;
+}
+
+async function doRefreshAccessToken(): Promise<boolean> {
+  try {
+    const resp = await fetch(`${API_BASE}/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+    });
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
 
 export class ApiError extends Error {
   status: number;
   detail: unknown;
+  code?: string;
 
-  constructor(message: string, status: number, detail: unknown) {
+  constructor(message: string, status: number, detail: unknown, code?: string) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.detail = detail;
+    this.code = code;
   }
-}
 
-export function setToken(t: string | null) {
-  token = t;
-  if (t) localStorage.setItem("auth_token", t);
-  else localStorage.removeItem("auth_token");
-}
+  get isRetryable(): boolean {
+    return this.status >= 500;
+  }
 
-export function getToken(): string | null {
-  if (!token) token = localStorage.getItem("auth_token");
-  return token;
+  get isAuthExpired(): boolean {
+    return this.code === "ERR_AUTH_EXPIRED" || this.status === 401;
+  }
 }
 
 async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(options.headers as Record<string, string>),
-  };
-  const t = getToken();
-  if (t) headers["Authorization"] = `Bearer ${t}`;
+  let lastError: Error | null = null;
+  let refreshedAfterAuthError = false;
+  const maxAttempts = MAX_RETRIES + 1;
 
-  const resp = await fetch(`${API_BASE}${path}`, {
-    cache: "no-store",
-    ...options,
-    headers,
-  });
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({ detail: resp.statusText }));
-    throw new ApiError(err.detail || "Request failed", resp.status, err);
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const { signal: _extSignal, ...restOptions } = options;
+      const resp = await fetch(`${API_BASE}${path}`, {
+        ...restOptions,
+        signal: controller.signal,
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(options.headers as Record<string, string>),
+        },
+      });
+
+      if (!resp.ok) {
+        let detail: unknown;
+        let code: string | undefined;
+        try {
+          const body = await resp.json();
+          detail = body.detail || body.error || resp.statusText;
+          code = body.error;
+        } catch {
+          const text = await resp.text().catch(() => "");
+          detail = text ? text.slice(0, 200) : resp.statusText;
+        }
+        const err = new ApiError(
+          formatApiDetail(detail),
+          resp.status,
+          detail,
+          code,
+        );
+        if (err.isAuthExpired && !refreshedAfterAuthError) {
+          refreshedAfterAuthError = true;
+          const refreshed = await refreshAccessToken();
+          if (refreshed) continue;
+        }
+        if (err.isRetryable && attempt < MAX_RETRIES) {
+          lastError = err;
+          const baseDelay = RETRY_BASE_DELAY * Math.pow(2, attempt);
+          await sleep(baseDelay * (0.5 + Math.random() * 0.5));
+          continue;
+        }
+        throw err;
+      }
+
+      if (resp.status === 204 || resp.headers.get("content-length") === "0") {
+        return undefined as T;
+      }
+
+      const text = await resp.text();
+      if (!text) return undefined as T;
+      return JSON.parse(text) as T;
+    } catch (err: unknown) {
+      if (err instanceof ApiError) throw err;
+      if (err instanceof Error && err.name === "AbortError") {
+        throw new ApiError("请求超时", 504, "Request timed out");
+      }
+      if (attempt < MAX_RETRIES) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        const baseDelay = RETRY_BASE_DELAY * Math.pow(2, attempt);
+        await sleep(baseDelay * (0.5 + Math.random() * 0.5));
+        continue;
+      }
+      throw lastError || new ApiError("Network error", 0, err);
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
-  return resp.json();
+
+  throw lastError || new Error("Unexpected error");
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // Auth
 export const auth = {
-  register: (username: string, password: string, display_name?: string) =>
-    request<AuthResponse>("/auth/register", {
-      method: "POST",
-      body: JSON.stringify({ username, password, display_name }),
-    }),
   login: (username: string, password: string) =>
     request<AuthResponse>("/auth/login", {
       method: "POST",
       body: JSON.stringify({ username, password }),
     }),
+  register: (username: string, password: string, display_name?: string) =>
+    request<AuthResponse>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ username, password, display_name }),
+    }),
+  logout: () =>
+    request<{ message: string }>("/auth/logout", { method: "POST" }),
+  me: () => request<User>("/auth/me"),
 };
 
 // Chat
@@ -115,6 +247,8 @@ export const chat = {
   ): AbortController => {
     const controller = new AbortController();
     let doneCalled = false;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 3;
 
     const finish = () => {
       if (!doneCalled) {
@@ -123,97 +257,122 @@ export const chat = {
       }
     };
 
-    fetch(`${API_BASE}/chat/stream`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${getToken()}`,
-      },
-      body: JSON.stringify({ message, session_id, travel_plan_id }),
-      signal: controller.signal,
-    })
-      .then(async (resp) => {
-        if (!resp.ok) {
-          const err = await resp.json().catch(() => ({ detail: resp.statusText }));
-          throw new Error(err.detail || "Request failed");
-        }
+    const startStream = () => {
+      fetch(`${API_BASE}/chat/stream`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ message, session_id, travel_plan_id }),
+        signal: controller.signal,
+      })
+        .then(async (resp) => {
+          if (!resp.ok) {
+            const errBody = await resp.json().catch(() => ({ detail: resp.statusText }));
+            if (resp.status === 401 && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+              const refreshed = await refreshAccessToken();
+              if (refreshed) {
+                reconnectAttempts++;
+                const baseDelay = Math.min(1000 * Math.pow(2, reconnectAttempts), 8000);
+                const delay = baseDelay * (0.5 + Math.random() * 0.5);
+                setTimeout(startStream, delay);
+                return;
+              }
+            }
+            throw new Error(errBody.detail || "Request failed");
+          }
 
-        const reader = resp.body?.getReader();
-        if (!reader) throw new Error("Response body is not readable");
+          const reader = resp.body?.getReader();
+          if (!reader) throw new Error("Response body is not readable");
 
-        const decoder = new TextDecoder();
-        let buffer = "";
+          const decoder = new TextDecoder();
+          let buffer = "";
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
 
-          for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              try {
-                const data = JSON.parse(line.slice(6));
-                switch (data.type) {
-                  case "token":
-                    callbacks.onToken(data.content);
-                    break;
-                  case "result":
-                    callbacks.onResult(data.content);
-                    break;
-                  case "plan":
-                    callbacks.onPlan(data.content);
-                    break;
-                  case "products":
-                    callbacks.onProducts?.(data.content);
-                    break;
-                  case "restaurants":
-                    callbacks.onRestaurants?.(data.content);
-                    break;
-                  case "diet_plan":
-                    callbacks.onDietPlan?.(data.content);
-                    break;
-                  case "cart_items":
-                    callbacks.onCartItems?.(data.content);
-                    break;
-                  case "done":
-                    finish();
-                    break;
-                  case "error":
-                    callbacks.onError(new Error(data.content));
-                    break;
-                  case "thinking":
-                    callbacks.onThinking?.(data.content);
-                    break;
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                try {
+                  const data = JSON.parse(line.slice(6));
+                  switch (data.type) {
+                    case "token":
+                      callbacks.onToken(data.content);
+                      break;
+                    case "result":
+                      callbacks.onResult(data.content);
+                      break;
+                    case "plan":
+                      callbacks.onPlan(data.content);
+                      break;
+                    case "products":
+                      callbacks.onProducts?.(data.content);
+                      break;
+                    case "restaurants":
+                      callbacks.onRestaurants?.(data.content);
+                      break;
+                    case "diet_plan":
+                      callbacks.onDietPlan?.(data.content);
+                      break;
+                    case "cart_items":
+                      callbacks.onCartItems?.(data.content);
+                      break;
+                    case "done":
+                      finish();
+                      break;
+                    case "error":
+                      callbacks.onError(new Error(data.content));
+                      finish();
+                      break;
+                    case "thinking":
+                      callbacks.onThinking?.(data.content);
+                      break;
+                  }
+                } catch {
+                  // skip malformed SSE lines
                 }
-              } catch {
-                // skip malformed SSE lines
               }
             }
           }
-        }
 
-        finish();
-      })
-      .catch((err) => {
-        if (err.name === "AbortError") {
+          if (!doneCalled && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+            reconnectAttempts++;
+            startStream();
+            return;
+          }
           finish();
-        } else {
-          callbacks.onError(err as Error);
-        }
-      });
+        })
+        .catch((err) => {
+          if (err.name === "AbortError") {
+            finish();
+          } else {
+            if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+              reconnectAttempts++;
+              const baseDelay = Math.min(1000 * Math.pow(2, reconnectAttempts), 8000);
+              const delay = baseDelay * (0.5 + Math.random() * 0.5);
+              setTimeout(startStream, delay);
+            } else {
+              callbacks.onError(err as Error);
+            }
+          }
+        });
+    };
 
+    startStream();
     return controller;
   },
 
   listSessions: () => request<ChatSession[]>("/chat/sessions"),
   getSession: (session_id: string) => request<ChatSessionDetail>(`/chat/sessions/${session_id}`),
   deleteSession: (session_id: string) =>
-    fetch(`${API_BASE}/chat/sessions/${session_id}`, {
+    request<{ status: string }>(`/chat/sessions/${session_id}`, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${getToken()}` },
     }),
 };
 
@@ -226,9 +385,8 @@ export const travel = {
       method: "POST",
     }),
   delete: (id: number) =>
-    fetch(`${API_BASE}/travel/plans/${id}`, {
+    request<{ status: string }>(`/travel/plans/${id}`, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${getToken()}` },
     }),
 };
 
@@ -276,9 +434,8 @@ export const diet = {
       body: JSON.stringify(data),
     }),
   deleteMeal: (id: number) =>
-    fetch(`${API_BASE}/diet/meals/${id}`, {
+    request<{ status: string }>(`/diet/meals/${id}`, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${getToken()}` },
     }),
   getPlans: () => request<DietPlanListItem[]>("/diet/plans"),
   getPlan: (id: number) => request<DietPlan>(`/diet/plans/${id}`),
@@ -287,9 +444,8 @@ export const diet = {
       method: "POST",
     }),
   deletePlan: (id: number) =>
-    fetch(`${API_BASE}/diet/plans/${id}`, {
+    request<{ status: string }>(`/diet/plans/${id}`, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${getToken()}` },
     }),
 };
 
@@ -317,9 +473,8 @@ export const restaurant = {
       body: JSON.stringify({ restaurant }),
     }),
   deleteRecommendation: (id: number) =>
-    fetch(`${API_BASE}/restaurant/recommendations/${id}`, {
+    request<{ status: string }>(`/restaurant/recommendations/${id}`, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${getToken()}` },
     }),
 };
 
@@ -337,12 +492,8 @@ export const user = {
       body: JSON.stringify({ preferences }),
     }),
   changePassword: (old_password: string, new_password: string) =>
-    fetch(`${API_BASE}/users/me/password`, {
+    request<{ status: string }>("/users/me/password", {
       method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${getToken()}`,
-      },
       body: JSON.stringify({ old_password, new_password }),
     }),
 };
@@ -382,14 +533,12 @@ export const commerce = {
       body: JSON.stringify(data),
     }),
   removeCartItem: (id: number) =>
-    fetch(`${API_BASE}/commerce/cart/items/${id}`, {
+    request<{ status: string }>(`/commerce/cart/items/${id}`, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${getToken()}` },
     }),
   clearCart: () =>
-    fetch(`${API_BASE}/commerce/cart`, {
+    request<{ status: string }>("/commerce/cart", {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${getToken()}` },
     }),
   listOrders: (params?: { status?: string; page?: number; page_size?: number }) => {
     const qs = new URLSearchParams();

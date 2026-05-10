@@ -2,20 +2,20 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { getToken, setToken, user as userApi } from "@/lib/api";
+import { checkAuth, auth } from "@/lib/api";
 import type { User } from "@/lib/types";
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  logout: () => void;
+  logout: () => Promise<void>;
   refreshUser?: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
-  logout: () => {},
+  logout: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -26,34 +26,34 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    const token = getToken();
-    if (!token) {
-      setLoading(false);
-      router.push("/");
-      return;
-    }
-    userApi
-      .me()
+    let cancelled = false;
+    checkAuth()
       .then((u) => {
-        setUser(u);
+        if (cancelled) return;
+        if (u) {
+          setUser(u);
+        }
         setLoading(false);
       })
       .catch(() => {
-        setToken(null);
-        setLoading(false);
-        router.push("/");
+        if (!cancelled) setLoading(false);
       });
-  }, []); // 仅在挂载时请求用户信息，避免页面切换时反复获取导致竞态
+    return () => { cancelled = true; };
+  }, []);
 
-  const logout = () => {
-    setToken(null);
+  const logout = async () => {
+    try {
+      await auth.logout();
+    } catch {
+      // ignore
+    }
     setUser(null);
-    window.location.href = "/";
+    router.replace("/");
   };
 
   const refreshUser = async () => {
     try {
-      const u = await userApi.me();
+      const u = await checkAuth();
       setUser(u);
     } catch { /* ignore */ }
   };

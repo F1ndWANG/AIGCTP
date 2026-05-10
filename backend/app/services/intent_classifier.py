@@ -97,6 +97,7 @@ def keyword_intent_score(message: str, has_travel_plan: bool) -> dict | None:
     if has_travel_plan:
         adjust_markers = (
             "调整", "修改", "更新", "变动", "太赶", "换", "换成", "不想去",
+            "不去", "不要", "去掉", "删掉", "删除", "移除", "换掉",
             "玩过", "去过", "加上", "加入", "安排", "预算", "控制", "轻松",
         )
         if any(m in msg for m in adjust_markers):
@@ -153,26 +154,31 @@ def keyword_intent_score(message: str, has_travel_plan: bool) -> dict | None:
 # LLM 语义分类
 # ──────────────────────────────────────────────
 
-CLASSIFICATION_SYSTEM_PROMPT = """你是意图分类专家。分析用户消息输出 JSON。
+CLASSIFICATION_SYSTEM_PROMPT = """你是意图分类专家。分析用户消息并输出 JSON。
 
 ## 意图列表
-- travel_plan: 想去某地旅游、旅行规划、行程安排（天数、攻略）
-- travel_adjust: 对已有行程的调整、修改、替换景点
-- diet_recommend: 饮食推荐、健康饮食建议、减肥/增肌方案
-- diet_log: 记录吃了什么（"午餐吃了...", "刚吃了..."）
-- diet_analyze: 饮食/营养数据分析（"分析我的饮食"）
-- restaurant_recommend: 找餐厅、美食推荐、附近吃的
-- commerce_recommend: 商品推荐、购物建议（"想买...", "有什么好物"）
+- travel_plan: 想要规划新的旅行行程（"帮我规划成都三日游"）
+- travel_adjust: 对已有行程进行修改（"不想去天安门"、"把故宫换成颐和园"、"重新规划这三天"）
+- travel_query: 仅询问已有行程的信息（"今天去哪"、"第二天什么安排"、"行程有哪些"）—— 不是调整，只是查询
+- diet_recommend: 饮食推荐、健康饮食建议
+- diet_log: 记录饮食（"午餐吃了..."、"刚吃了..."）
+- diet_analyze: 饮食营养分析（"分析我的饮食"）
+- restaurant_recommend: 找餐厅、美食推荐
+- commerce_recommend: 商品推荐、购物建议
 - auto_cart: 加购/下单（"帮我买...", "加入购物车"）
-- quick_reorder: 复购（"再买一次", "重新购买"）
-- route_query: 路线导航（"怎么去", "指路"）
-- general_chat: 闲聊问候或不属于以上任何类别
+- quick_reorder: 复购
+- route_query: 路线导航
+- general_chat: 闲聊或不属于以上类别
+
+## 关键区分
+- 询问当前行程信息（无修改意图）→ travel_query
+- 要求改变/替换/增加/删除行程内容 → travel_adjust
+- 想规划全新旅行 → travel_plan
 
 ## 复合意图
-如果消息同时涉及多个领域，将次要意图放入 secondary_intents。
-例如 "去成都玩，推荐好吃的" → primary: travel_plan, secondary: [restaurant_recommend]
+消息涉及多个领域时，次要意图放入 secondary_intents。
 
-## 输出格式（纯JSON，不要其他文字）
+## 输出格式（纯JSON）
 {"primary_intent": "...", "secondary_intents": [], "confidence": 0.95, "reasoning": "简短理由"}"""
 
 
@@ -206,12 +212,13 @@ async def _llm_classify(message: str, recent_context: list[dict] | None = None) 
             "confidence": min(float(result.get("confidence", 0.5)), 1.0),
             "reasoning": result.get("reasoning", ""),
         }
-    except Exception:
+    except Exception as e:
+        logger.warning("LLM intent classification failed: %s", e)
         return {"intent": "general_chat", "composite_intents": [], "confidence": 0.0, "reasoning": "LLM 分类失败"}
 
 
 _VALID_INTENTS = frozenset({
-    "travel_plan", "travel_adjust",
+    "travel_plan", "travel_adjust", "travel_query",
     "diet_recommend", "diet_log", "diet_analyze",
     "restaurant_recommend",
     "commerce_recommend", "auto_cart", "quick_reorder",
@@ -288,9 +295,15 @@ async def extract_parameters(
     elif intent == "travel_plan" and not params["days"]:
         params["needs_clarification"] = True
         params["clarification_question"] = f"你打算在{params['destination']}玩几天？"
+    elif intent == "travel_plan":
+        params["needs_clarification"] = False
+        params["clarification_question"] = ""
     elif intent == "restaurant_recommend" and not params["destination"]:
         params["needs_clarification"] = True
         params["clarification_question"] = "你想在哪个城市找餐厅？"
+    elif intent == "restaurant_recommend":
+        params["needs_clarification"] = False
+        params["clarification_question"] = ""
     elif intent == "commerce_recommend" and not params["keywords"]:
         params["needs_clarification"] = True
         params["clarification_question"] = "你想买什么类型的商品？"
@@ -323,7 +336,7 @@ async def classify(
     # Step 1: 关键词快速路径
     keyword_result = keyword_intent_score(message, has_travel_plan)
 
-    if keyword_result and keyword_result.get("confidence", 0) >= 0.85:
+    if keyword_result and keyword_result.get("confidence", 0) >= 0.7:
         llm_params = await extract_parameters(message, keyword_result["intent"], keyword_result)
         return {
             "intent": keyword_result["intent"],
@@ -335,8 +348,35 @@ async def classify(
             "reasoning": f"关键词快速匹配: {keyword_result['intent']}",
         }
 
-    # Step 2: LLM 语义分类
-    llm_result = await _llm_classify(message, recent_messages)
+    # Step 2: LLM 语义分类（带超时回退）
+    import asyncio
+    try:
+        llm_result = await asyncio.wait_for(
+            _llm_classify(message, recent_messages),
+            timeout=6,
+        )
+    except asyncio.TimeoutError:
+        # LLM 分类超时，用关键词结果回退
+        if keyword_result and keyword_result.get("confidence", 0) >= 0.3:
+            llm_params = await extract_parameters(message, keyword_result["intent"], keyword_result)
+            return {
+                "intent": keyword_result["intent"],
+                "composite_intents": keyword_result.get("composite_intents", []),
+                "confidence": keyword_result["confidence"],
+                "extracted": llm_params,
+                "needs_clarification": llm_params.get("needs_clarification", False),
+                "clarification_question": llm_params.get("clarification_question", ""),
+                "reasoning": "LLM 超时，回退关键词",
+            }
+        return {
+            "intent": "general_chat",
+            "composite_intents": [],
+            "confidence": 0.5,
+            "extracted": await extract_parameters(message, "general_chat", None),
+            "needs_clarification": False,
+            "clarification_question": "",
+            "reasoning": "LLM 超时，回退通用对话",
+        }
     if keyword_result and (
         llm_result["confidence"] < 0.3
         or llm_result["intent"] == "general_chat"
@@ -399,8 +439,14 @@ def _extract_days(text: str) -> int:
     digit = re.search(r"(\d+)\s*[天日]", text)
     if digit:
         return int(digit.group(1))
-    cn_map = {"一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
-    cn = re.search(r"([一二两三四五六七八九])\s*[天日]", text)
+    cn_map = {"一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
+    # Try multi-character numbers first (e.g., "十二", "三十")
+    multi = re.search(r"([十二三四五六七八九])(十)([一二三四五六七八九]?)\s*[天日]", text)
+    if multi:
+        tens = cn_map.get(multi.group(1), 1)
+        ones = cn_map.get(multi.group(3), 0)
+        return tens * 10 + ones
+    cn = re.search(r"([一二两三四五六七八九十])\s*[天日]", text)
     if cn:
         return cn_map.get(cn.group(1), 0)
     return 0

@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Send } from "lucide-react";
+import { Textarea } from "@/components/UI/textarea";
+import { ShimmerButton } from "@/components/UI/shimmer-button";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -38,10 +41,10 @@ export default function ChatInput({
   };
 
   return (
-    <div className="border-t dark:border-slate-700 bg-white dark:bg-slate-800 p-4">
+    <div className="border-t border-border/50 bg-background/80 backdrop-blur-sm p-4">
       <div className="max-w-4xl mx-auto flex gap-3 items-end">
         <div className="flex-1 relative">
-          <textarea
+          <Textarea
             ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -51,20 +54,24 @@ export default function ChatInput({
             maxLength={2000}
             disabled={disabled}
             aria-label="输入消息"
-            className="w-full px-4 py-3 border border-gray-300 rounded-xl resize-none outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 max-h-[200px]"
+            className="min-h-[44px] max-h-[200px] pr-16 resize-none rounded-xl"
           />
-          <span className="absolute bottom-2 right-3 text-xs text-gray-400 dark:text-gray-500 pointer-events-none select-none">
+          <span className="absolute bottom-2.5 right-3 text-xs text-muted-foreground pointer-events-none select-none">
             {input.length}/2000
           </span>
         </div>
-        <button
+        <ShimmerButton
           onClick={handleSubmit}
           disabled={disabled || !input.trim()}
+          shimmerColor="#d946ef"
+          background="linear-gradient(135deg, #d946ef, #ec4899)"
+          borderRadius="12px"
+          className="px-5 py-3 h-[44px] shrink-0"
           aria-label={disabled ? "思考中" : "发送消息"}
-          className="px-5 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
         >
-          {disabled ? "思考中..." : "发送"}
-        </button>
+          <Send className="h-4 w-4 mr-1.5" />
+          {disabled ? "思考中" : "发送"}
+        </ShimmerButton>
       </div>
     </div>
   );

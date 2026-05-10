@@ -1,6 +1,6 @@
 from datetime import datetime, date
 from typing import Optional, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.schemas.commerce import CartItemResponse, ProductListItem
 from app.schemas.diet import DietPlanResponse
@@ -71,8 +71,9 @@ class ChatSessionDetailResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     session_id: Optional[str] = None
-    message: str
+    message: str = Field(..., max_length=5000)
     travel_plan_id: Optional[int] = None  # for adjustments on existing plan
+    background: bool = False  # offload heavy operations to worker
 
 
 class ChatResponse(BaseModel):

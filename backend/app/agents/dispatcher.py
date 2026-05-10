@@ -18,6 +18,7 @@ from app.services.context_builder import build_preferences
 from app.services.llm import llm_service
 from app.services.travel_text import (
     DEFAULT_CITY,
+    KNOWN_CITIES,
     extract_days,
     extract_destination,
     extract_destination_from_messages,
@@ -29,6 +30,7 @@ from app.services.travel_text import (
 THINKING_LABELS = {
     "travel_plan": "正在规划行程...",
     "travel_adjust": "正在调整行程...",
+    "travel_query": "正在查看行程...",
     "diet_recommend": "正在分析饮食需求...",
     "diet_log": "正在记录饮食...",
     "diet_analyze": "正在分析营养数据...",
@@ -54,11 +56,14 @@ class AgentDispatcher:
         context: dict[str, Any],
         user_id: int,
         db: AsyncSession,
+        progress_reporter: "ProgressReporter | None" = None,
     ) -> dict[str, Any]:
         if intent == "clarification":
             return {"response": extracted.get("question", "请提供更多信息，我来帮你安排。")}
 
         preferences = build_preferences(context)
+        travel_memory = context.get("travel_memory", {}) or {}
+        avoid_pois = list(travel_memory.get("avoid_pois", []) or [])
 
         if intent == "travel_plan":
             destination = extracted.get("destination") or extract_destination(user_message)
@@ -70,6 +75,9 @@ class AgentDispatcher:
                 db=db,
                 user_preferences=preferences,
                 original_message=user_message,
+                reporter=progress_reporter,
+                conversation_messages=messages,
+                avoid_pois=avoid_pois,
             ))
             result = await cross_domain_composer.merge(
                 result,
@@ -88,6 +96,9 @@ class AgentDispatcher:
                 result["response"] = result.get("response", "") + "\n\n" + "-" * 20 + "\n\n**接下来你可以：**\n" + "\n".join(suggestions)
             return result
 
+        if intent == "travel_query" and context.get("current_travel_plan"):
+            return _answer_plan_query(user_message, context["current_travel_plan"])
+
         if intent == "travel_adjust" and context.get("current_travel_plan"):
             return await self._dispatch_travel_adjust(
                 user_message=user_message,
@@ -96,6 +107,7 @@ class AgentDispatcher:
                 user_id=user_id,
                 db=db,
                 preferences=preferences,
+                progress_reporter=progress_reporter,
             )
 
         if intent == "diet_recommend":
@@ -147,15 +159,25 @@ class AgentDispatcher:
         user_id: int,
         db: AsyncSession,
         preferences: dict[str, Any],
+        progress_reporter: "ProgressReporter | None" = None,
     ) -> dict[str, Any]:
         plan = context["current_travel_plan"]
+
+        # Quick query detection: if the user is just asking about the plan (not modifying it),
+        # respond directly without triggering heavy re-planning.
+        if _is_plan_query(user_message):
+            return await _answer_plan_query(user_message, plan)
+
         new_dest = extract_destination(user_message)
         if new_dest == DEFAULT_CITY:
             new_dest = extract_destination_from_messages(messages)
         if (not new_dest or new_dest == DEFAULT_CITY) and messages:
             new_dest = await llm_extract_destination(user_message, messages)
-        if new_dest and new_dest != plan["destination"]:
+        # Only trigger full re-plan if user explicitly wants a different city
+        if new_dest and new_dest != plan["destination"] and new_dest in KNOWN_CITIES:
             days = extract_days(user_message) or plan["days"] or 3
+            if progress_reporter:
+                await progress_reporter.step(f"正在规划{new_dest}的行程...")
             return to_legacy_payload(await travel_agent.plan_trip(
                 destination=new_dest,
                 days=days,
@@ -163,6 +185,9 @@ class AgentDispatcher:
                 db=db,
                 user_preferences=preferences,
                 original_message=user_message,
+                reporter=progress_reporter,
+                conversation_messages=messages,
+                avoid_pois=list(context.get("travel_memory", {}).get("avoid_pois", []) or []),
             ))
 
         return to_legacy_payload(await travel_agent.adjust_plan(
@@ -173,6 +198,9 @@ class AgentDispatcher:
             days=plan["days"],
             db=db,
             user_id=user_id,
+            reporter=progress_reporter,
+            conversation_messages=messages,
+            avoid_pois=list(context.get("travel_memory", {}).get("avoid_pois", []) or []),
         ))
 
     async def _dispatch_diet_recommend(
@@ -211,7 +239,7 @@ class AgentDispatcher:
         user_id: int,
         db: AsyncSession,
     ) -> dict[str, Any]:
-        city = extracted.get("destination") or ""
+        city = extracted.get("destination") or extracted.get("city") or ""
         cuisine = extracted.get("cuisine")
         hp_result = await db.execute(select(HealthProfile).where(HealthProfile.user_id == user_id))
         hp = hp_result.scalar_one_or_none()
@@ -269,6 +297,69 @@ class AgentDispatcher:
             }
             for record in records
         ]
+
+
+QUERY_KEYWORDS = (
+    "今天", "明天", "后天", "安排", "有什么", "怎么玩",
+    "第", "天去哪", "天去", "天玩", "行程是什么", "行程怎么",
+    "安排什么", "看下", "显示", "列出", "怎么走",
+)
+
+
+def _is_plan_query(message: str) -> bool:
+    """Detect if the user is just asking about the current plan, not modifying it."""
+    adjust_keywords = (
+        "换", "改", "加", "删", "移除", "去掉", "不想去", "不去",
+        "重新", "调整", "修改", "更新", "替换", "增加", "添加",
+    )
+    if any(kw in message for kw in adjust_keywords):
+        return False
+    return any(kw in message for kw in QUERY_KEYWORDS)
+
+
+def _answer_plan_query(message: str, plan: dict) -> dict[str, Any]:
+    """Quickly answer a query about the current plan without re-planning."""
+    itinerary = plan.get("itinerary", {}) or {}
+    day_by_day = itinerary.get("day_by_day", []) or []
+
+    # Extract target day
+    target_day = None
+    day_map = {"一": 0, "二": 1, "三": 2, "四": 3, "五": 4, "1": 0, "2": 1, "3": 2, "4": 3, "5": 4}
+    for key, idx in day_map.items():
+        if f"第{key}天" in message:
+            target_day = day_by_day[idx] if idx < len(day_by_day) else None
+            break
+
+    # If "今天" or no specific day, show all
+    if target_day is None:
+        lines = [f"你的{plan['destination']}行程（共{plan['days']}天）:"]
+        for day in day_by_day:
+            day_num = day.get("day", "?")
+            day_theme = day.get("theme", "")
+            lines.append(f"\n**第{day_num}天: {day_theme}**")
+            weather = day.get("weather", {})
+            if weather.get("condition"):
+                lines.append(f"  天气: {weather.get('condition')} {weather.get('temp_min','')}~{weather.get('temp_max','')}°C")
+            for act in day.get("activities", []) or []:
+                lines.append(f"  - {act.get('time','')}: {act.get('poi','')} ({act.get('duration','')})")
+        return {"response": "\n".join(lines)}
+
+    # Show specific day
+    day_num = target_day.get("day", "?")
+    day_theme = target_day.get("theme", "")
+    lines = [f"**第{day_num}天: {day_theme}**"]
+    weather = target_day.get("weather", {})
+    if weather.get("condition"):
+        lines.append(f"天气: {weather.get('condition')} {weather.get('temp_min','')}~{weather.get('temp_max','')}°C")
+    lines.append("")
+    for act in target_day.get("activities", []) or []:
+        lines.append(f"- {act.get('time','')}: {act.get('poi','')} ({act.get('duration','')})")
+        if act.get("description"):
+            lines.append(f"  {act.get('description','')}")
+    lines.append("")
+    for meal in target_day.get("meals", []) or []:
+        lines.append(f"- {meal.get('type','')}: {meal.get('restaurant','')} — {meal.get('recommendation','')}")
+    return {"response": "\n".join(lines)}
 
 
 agent_dispatcher = AgentDispatcher()

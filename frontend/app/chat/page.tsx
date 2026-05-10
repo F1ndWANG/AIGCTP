@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/Layout/AuthProvider";
 import { useToast } from "@/components/UI/Toast";
 import ThemeToggle from "@/components/UI/ThemeToggle";
+import { MessageCircle, Plus, Map, History, Search, LogOut, Package } from "lucide-react";
 import MessageList from "@/components/Chat/MessageList";
 import ChatInput from "@/components/Chat/ChatInput";
 import SuggestionChips from "@/components/Chat/SuggestionChips";
@@ -52,11 +53,20 @@ function ChatPageContent() {
   const [currentDietPlan, setCurrentDietPlan] = useState<Record<string, unknown> | null>(null);
   const [currentCartItems, setCurrentCartItems] = useState<Array<Record<string, unknown>>>([]);
   const [confirmingPlan, setConfirmingPlan] = useState(false);
-  const [failedMessages, setFailedMessages] = useState<Set<number>>(new Set());
+  const [failedMessages, setFailedMessages] = useState<Set<string>>(new Set());
+  const [llmStatus, setLlmStatus] = useState<"checking" | "ok" | "error">("checking");
   const lastSentMessageRef = useRef<string>("");
   const abortRef = useRef<AbortController | null>(null);
   const restoredSessionRef = useRef<string | null>(null);
   const searchParams = useSearchParams();
+
+  // Check DeepSeek connectivity on mount
+  useEffect(() => {
+    fetch("/api/health/llm", { signal: AbortSignal.timeout(8000) })
+      .then((r) => r.json())
+      .then((d) => setLlmStatus(d.status === "ok" ? "ok" : "error"))
+      .catch(() => setLlmStatus("error"));
+  }, []);
 
   // Restore session from URL query param
   useEffect(() => {
@@ -74,8 +84,13 @@ function ChatPageContent() {
 
   const handleSend = useCallback(
     (message: string) => {
+      const assistantMessageId = generateId();
       const userMsg: Message = { role: "user", content: message };
-      setMessages((prev) => [...prev, userMsg]);
+      const assistantMsg: Message = { id: assistantMessageId, role: "assistant", content: "" };
+      let assistantHasContent = false;
+      let streamCompleted = false;
+
+      setMessages((prev) => [...prev, userMsg, assistantMsg]);
       setSending(true);
       lastSentMessageRef.current = message;
       setFailedMessages(new Set());
@@ -84,8 +99,6 @@ function ChatPageContent() {
       if (!sessionIdRef.current) setSessionId(sid);
       setActiveSessionId(sid);
 
-      // Add placeholder assistant message for streaming
-      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
       setThinkingText("AI 正在思考...");
 
       const controller = chatApi.sendStream(
@@ -93,21 +106,24 @@ function ChatPageContent() {
         {
           onThinking: (text: string) => setThinkingText(text),
           onToken: (token: string) => {
+            assistantHasContent = true;
             setThinkingText("");
             setMessages((prev) => {
-              const copy = [...prev];
-              const last = copy[copy.length - 1];
-              if (last.role === "assistant") {
-                copy[copy.length - 1] = { ...last, content: last.content + token };
-              }
-              return copy;
+              return prev.map((msg) =>
+                msg.id === assistantMessageId
+                  ? { ...msg, content: msg.content + token }
+                  : msg
+              );
             });
           },
           onResult: (text: string) => {
+            assistantHasContent = Boolean(text);
             setMessages((prev) => {
-              const copy = [...prev];
-              copy[copy.length - 1] = { role: "assistant", content: text };
-              return copy;
+              return prev.map((msg) =>
+                msg.id === assistantMessageId
+                  ? { ...msg, content: text }
+                  : msg
+              );
             });
           },
           onPlan: (plan: Record<string, unknown>) => {
@@ -117,12 +133,28 @@ function ChatPageContent() {
           onRestaurants: (recommendation) => setCurrentRestaurantRec(recommendation),
           onDietPlan: (plan) => setCurrentDietPlan(plan),
           onCartItems: (items) => setCurrentCartItems(items),
-          onDone: () => { setSending(false); setThinkingText(""); },
+          onDone: () => {
+            streamCompleted = true;
+            setSending(false);
+            setThinkingText("");
+            if (assistantHasContent) {
+              setFailedMessages((prev) => {
+                const next = new Set(prev);
+                next.delete(assistantMessageId);
+                return next;
+              });
+            }
+          },
           onError: (err: Error) => {
+            if (streamCompleted || assistantHasContent) {
+              setSending(false);
+              setThinkingText("");
+              return;
+            }
             toast(err.message, "error");
             setSending(false);
             setThinkingText("");
-            setFailedMessages(new Set([messagesRef.current.length - 1]));
+            setFailedMessages(new Set([assistantMessageId]));
           },
         },
         sid,
@@ -144,7 +176,7 @@ function ChatPageContent() {
       }
       return copy;
     });
-    setFailedMessages(new Set());
+    setFailedMessages(new Set<string>());
     // Re-send immediately
     setTimeout(() => handleSend(lastMsg), 0);
   }, [handleSend]);
@@ -317,48 +349,77 @@ function ChatPageContent() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-slate-900">
+    <div className="min-h-screen flex flex-col bg-background">
       {/* Header */}
-      <header className="bg-white dark:bg-slate-800 border-b dark:border-slate-700 px-4 py-3">
+      <header className="sticky top-0 z-30 border-b border-border/50 bg-background/80 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60 px-4 py-3">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h1 className="font-bold text-lg text-gray-900 dark:text-gray-100">AI 生活推荐</h1>
-            <button
-              onClick={newChat}
-              className="text-xs px-3 py-1.5 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 transition"
-            >
-              + 新对话
-            </button>
-            <button
-              onClick={loadHistory}
-              className="text-xs px-3 py-1.5 bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-slate-600 transition"
-            >
-              历史行程
-            </button>
-            <button
-              onClick={loadChatSessions}
-              className="text-xs px-3 py-1.5 bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-slate-600 transition"
-            >
-              历史对话
-            </button>
-            <ChatSearch messages={messages} />
-            <button
-              onClick={() => setShowProductSearch(!showProductSearch)}
-              className="text-xs px-3 py-1.5 bg-orange-50 text-orange-600 rounded-full hover:bg-orange-100 transition"
-            >
-              搜商品
-            </button>
+          <div className="flex items-center gap-2">
+            <h1 className="font-bold text-lg bg-gradient-to-r from-fuchsia-500 to-pink-500 bg-clip-text text-transparent">AI 生活推荐</h1>
+            <div className="hidden sm:flex items-center gap-1.5 ml-3">
+              <button
+                onClick={newChat}
+                className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 bg-primary/10 text-primary rounded-full hover:bg-primary/20 transition-colors"
+              >
+                <Plus className="h-3 w-3" /> 新对话
+              </button>
+              <button
+                onClick={loadHistory}
+                className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 bg-muted text-muted-foreground rounded-full hover:bg-muted/80 transition-colors"
+              >
+                <Map className="h-3 w-3" /> 历史行程
+              </button>
+              <button
+                onClick={loadChatSessions}
+                className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 bg-muted text-muted-foreground rounded-full hover:bg-muted/80 transition-colors"
+              >
+                <History className="h-3 w-3" /> 历史对话
+              </button>
+              <ChatSearch messages={messages} />
+              <button
+                onClick={() => setShowProductSearch(!showProductSearch)}
+                className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 rounded-full hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+              >
+                <Package className="h-3 w-3" /> 搜商品
+              </button>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <ThemeToggle />
-            <span className="text-sm text-gray-500 dark:text-gray-400">{user.display_name}</span>
+            <span className="text-sm text-muted-foreground hidden sm:inline">{user.display_name}</span>
             <button
               onClick={() => logout()}
-              className="text-xs px-3 py-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-full transition"
+              className="inline-flex items-center gap-1 text-xs px-3 py-1.5 text-destructive hover:bg-destructive/10 rounded-full transition-colors"
             >
-              退出
+              <LogOut className="h-3 w-3" /> 退出
             </button>
           </div>
+        </div>
+        {/* Mobile action row */}
+        <div className="sm:hidden flex items-center gap-1.5 mt-2 overflow-x-auto pb-0.5">
+          <button
+            onClick={newChat}
+            className="shrink-0 inline-flex items-center gap-1 text-xs px-3 py-1.5 bg-primary/10 text-primary rounded-full"
+          >
+            <Plus className="h-3 w-3" /> 新对话
+          </button>
+          <button
+            onClick={loadHistory}
+            className="shrink-0 inline-flex items-center gap-1 text-xs px-3 py-1.5 bg-muted text-muted-foreground rounded-full"
+          >
+            <Map className="h-3 w-3" /> 行程
+          </button>
+          <button
+            onClick={loadChatSessions}
+            className="shrink-0 inline-flex items-center gap-1 text-xs px-3 py-1.5 bg-muted text-muted-foreground rounded-full"
+          >
+            <History className="h-3 w-3" /> 对话
+          </button>
+          <button
+            onClick={() => setShowProductSearch(!showProductSearch)}
+            className="shrink-0 inline-flex items-center gap-1 text-xs px-3 py-1.5 bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 rounded-full"
+          >
+            <Package className="h-3 w-3" /> 商品
+          </button>
         </div>
       </header>
 
@@ -415,8 +476,19 @@ function ChatPageContent() {
         hasDietPlan={chipContext.hasDietPlan}
       />
 
+      {/* LLM status indicator */}
+      <div className="flex justify-center">
+        <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+          llmStatus === "ok" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
+          llmStatus === "error" ? "bg-destructive/10 text-destructive" :
+          "bg-muted text-muted-foreground"
+        }`}>
+          {llmStatus === "ok" ? "DeepSeek 已连接" : llmStatus === "error" ? "DeepSeek 连接异常" : "检查连接中..."}
+        </span>
+      </div>
+
       {/* Input */}
-      <ChatInput onSend={handleSend} disabled={sending} />
+      <ChatInput onSend={handleSend} disabled={sending || llmStatus === "error"} />
     </div>
   );
 }
@@ -426,7 +498,7 @@ export default function ChatPage() {
     <Suspense
       fallback={
         <div className="min-h-screen flex items-center justify-center">
-          <div className="animate-spin w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full" />
+          <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
         </div>
       }
     >

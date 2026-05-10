@@ -17,8 +17,7 @@ Supervisor Agent - 意图识别与路由分发
   3. 参数提取（LLM + 关键词回退）
   4. 低置信度时主动追问确认
 """
-
-import re
+import asyncio
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,53 +25,33 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.dispatcher import agent_dispatcher, thinking_label_for_intent
 from app.services.context_builder import has_current_travel_plan
 from app.services.intent_classifier import classify as classify_intent
-from app.services.intent_classifier import keyword_intent_score
-from app.services.llm import llm_service
-from app.services.travel_text import (
-    extract_days,
-    extract_destination,
-    extract_destination_from_messages,
-    general_chat_system_prompt,
-    llm_extract_destination,
-)
+from app.services.llm import llm_service, CircuitBreakerOpen
+from app.services.progress import ProgressReporter
+from app.services.travel_text import general_chat_system_prompt
+
+
+# ──────────────────────────────────────────────
+# Synchronous keyword classifier (used by tests)
+# ──────────────────────────────────────────────
 
 
 def _classify_intent(user_message: str, has_travel_plan: bool = False) -> tuple[str, dict]:
-    """Synchronous compatibility wrapper for deterministic intent tests.
+    """Synchronous keyword-only classifier for deterministic tests.
 
-    Runtime routing uses the async hybrid classifier. This function exposes only
-    the zero-LLM keyword path so tests and lightweight callers have a stable
-    contract without needing an event loop or external model.
+    Production routing uses the async hybrid classifier (_run_classifier).
+    Delegates to intent_classifier.keyword_intent_score as the single source of truth.
     """
-    msg = user_message.strip()
-    non_travel = keyword_intent_score(msg, has_travel_plan=False)
-    if non_travel and non_travel["intent"] in {
-        "quick_reorder",
-        "auto_cart",
-        "diet_log",
-        "diet_analyze",
-        "diet_recommend",
-        "restaurant_recommend",
-        "commerce_recommend",
-    }:
-        return non_travel["intent"], dict(non_travel.get("extracted") or {})
+    from app.services.intent_classifier import keyword_intent_score
 
-    if has_travel_plan:
-        adjustment_markers = (
-            "调整", "修改", "更新", "变动", "太赶", "换", "换成", "不想去",
-            "玩过", "去过", "加上", "加入", "安排", "预算", "控制", "轻松",
-        )
-        if any(marker in msg for marker in adjustment_markers):
-            return "travel_adjust", {}
-        if re.search(r"(第[一二三四五六七八九\d]+天|上午|下午|晚上|中午|早上).*(去|加|安排|换)", msg):
-            return "travel_adjust", {}
-        if re.search(r"想去[一-鿿A-Za-z0-9·]{2,20}", msg):
-            return "travel_adjust", {}
-
-    result = keyword_intent_score(msg, has_travel_plan)
+    result = keyword_intent_score(user_message.strip(), has_travel_plan)
     if result:
         return result["intent"], dict(result.get("extracted") or {})
     return "general_chat", {}
+
+
+# ──────────────────────────────────────────────
+# Intent classification
+# ──────────────────────────────────────────────
 
 
 async def _run_classifier(
@@ -81,12 +60,7 @@ async def _run_classifier(
     force_travel_adjust: bool = False,
     recent_messages: list[dict] | None = None,
 ) -> tuple[str, dict]:
-    """Unified intent classification: hybrid keyword + LLM semantic.
-
-    Returns (intent, extracted_params) matching the original contract,
-    preserving also_recommend_food/also_recommend_products conventions
-    for cross-domain merging.
-    """
+    """Unified intent classification: hybrid keyword + LLM semantic."""
     if force_travel_adjust and has_travel_plan:
         return "travel_adjust", {}
 
@@ -98,18 +72,21 @@ async def _run_classifier(
     intent = result["intent"]
     extracted: dict[str, Any] = dict(result["extracted"])
 
-    # Preserve cross-domain conventions expected by downstream merge code
     if result.get("composite_intents"):
         extracted["also_recommend_food"] = "restaurant_recommend" in result["composite_intents"]
         extracted["also_recommend_products"] = "commerce_recommend" in result["composite_intents"]
 
-    # Clarification: needs_clarification routes to a clarification response
     if result.get("needs_clarification") and intent not in ("general_chat", "clarification"):
         question = result.get("clarification_question", "")
         if question:
             return "clarification", {"question": question, "original_intent": intent}
 
     return intent, extracted
+
+
+# ──────────────────────────────────────────────
+# Agent entry points
+# ──────────────────────────────────────────────
 
 
 async def run_agent(
@@ -119,23 +96,17 @@ async def run_agent(
     user_id: int,
     db: AsyncSession,
 ) -> dict[str, Any]:
-    """Analyze intent and route to the right agent."""
+    """Non-streaming entry point. Analyze intent and route to the right agent."""
     has_travel_plan = has_current_travel_plan(context)
     intent, extracted = await _run_classifier(
-        user_message,
-        has_travel_plan,
+        user_message, has_travel_plan,
         force_travel_adjust=bool(context.get("force_travel_adjust")),
         recent_messages=messages,
     )
-
     return await agent_dispatcher.dispatch(
-        intent=intent,
-        extracted=extracted,
-        user_message=user_message,
-        messages=messages,
-        context=context,
-        user_id=user_id,
-        db=db,
+        intent=intent, extracted=extracted,
+        user_message=user_message, messages=messages,
+        context=context, user_id=user_id, db=db,
     )
 
 
@@ -146,16 +117,20 @@ async def run_agent_stream(
     user_id: int,
     db: AsyncSession,
 ):
-    """Streaming variant for SSE consumption."""
+    """Streaming entry point for SSE consumption with real-time progress events."""
     yield {"type": "thinking", "content": "正在分析你的请求..."}
 
     has_travel_plan = has_current_travel_plan(context)
-    intent, extracted = await _run_classifier(
-        user_message,
-        has_travel_plan,
-        force_travel_adjust=bool(context.get("force_travel_adjust")),
-        recent_messages=messages,
-    )
+    try:
+        intent, extracted = await _run_classifier(
+            user_message, has_travel_plan,
+            force_travel_adjust=bool(context.get("force_travel_adjust")),
+            recent_messages=messages,
+        )
+    except CircuitBreakerOpen:
+        yield {"type": "result", "content": {"response": "AI 服务暂时不可用，请稍后重试。如果问题持续，请联系管理员。"}}
+        yield {"type": "done"}
+        return
 
     if intent == "clarification":
         yield {"type": "result", "content": {"response": extracted.get("question", "请提供更多信息。")}}
@@ -165,56 +140,53 @@ async def run_agent_stream(
     if intent == "general_chat":
         yield {"type": "thinking", "content": "正在思考..."}
         clean_messages = [{"role": m["role"], "content": m["content"]} for m in messages]
-        async for token in llm_service.chat_stream(
-            system_prompt=general_chat_system_prompt(),
-            messages=clean_messages,
-            max_tokens=1024,
-            temperature=0.7,
-        ):
-            yield {"type": "token", "content": token}
-    else:
-        yield {"type": "thinking", "content": thinking_label_for_intent(intent)}
-        result = await agent_dispatcher.dispatch(
-            intent=intent,
-            extracted=extracted,
-            user_message=user_message,
-            messages=messages,
-            context=context,
-            user_id=user_id,
-            db=db,
+        try:
+            async for token in llm_service.chat_stream(
+                system_prompt=general_chat_system_prompt(),
+                messages=clean_messages,
+                max_tokens=1024,
+                temperature=0.7,
+            ):
+                yield {"type": "token", "content": token}
+        except CircuitBreakerOpen:
+            yield {"type": "result", "content": {"response": "AI 服务暂时不可用，请稍后重试。"}}
+        yield {"type": "done"}
+        return
+
+    yield {"type": "thinking", "content": thinking_label_for_intent(intent)}
+
+    # Bridge agent progress events to SSE via queue
+    progress_queue: asyncio.Queue[str] = asyncio.Queue(maxsize=32)
+
+    async def on_progress(msg: str) -> None:
+        try:
+            progress_queue.put_nowait(msg)
+        except asyncio.QueueFull:
+            pass  # drop progress update if queue is full
+
+    reporter = ProgressReporter(on_progress)
+
+    async def run_dispatch():
+        return await agent_dispatcher.dispatch(
+            intent=intent, extracted=extracted,
+            user_message=user_message, messages=messages,
+            context=context, user_id=user_id, db=db,
+            progress_reporter=reporter,
         )
+
+    agent_task = asyncio.create_task(run_dispatch())
+
+    while not agent_task.done():
+        try:
+            msg = await asyncio.wait_for(progress_queue.get(), timeout=0.3)
+            yield {"type": "thinking", "content": msg}
+        except asyncio.TimeoutError:
+            pass
+
+    try:
+        result = await agent_task
         yield {"type": "result", "content": result}
+    except CircuitBreakerOpen:
+        yield {"type": "result", "content": {"response": "AI 服务暂时不可用，请稍后重试。"}}
 
     yield {"type": "done"}
-
-
-def _general_chat_system_prompt() -> str:
-    return general_chat_system_prompt()
-
-
-def _extract_destination_fallback(text: str) -> str:
-    return extract_destination(text)
-
-
-def _extract_days_fallback(text: str) -> int:
-    return extract_days(text)
-
-
-def _extract_cuisine(text: str) -> str | None:
-    cuisine_keywords = [
-        "川菜", "粤菜", "湘菜", "鲁菜", "苏菜", "浙菜", "闽菜", "徽菜",
-        "火锅", "烧烤", "日料", "韩餐", "西餐", "甜品", "咖啡", "奶茶",
-        "海鲜", "素食", "小吃", "面食", "麻辣", "清淡",
-    ]
-    for keyword in cuisine_keywords:
-        if keyword in text:
-            return keyword
-    return None
-
-
-def _extract_destination_from_messages(messages: list[dict]) -> str | None:
-    return extract_destination_from_messages(messages)
-
-
-async def _llm_extract_destination(user_message: str, messages: list[dict]) -> str | None:
-    return await llm_extract_destination(user_message, messages)

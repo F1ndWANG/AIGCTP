@@ -97,7 +97,7 @@ async def save_conversation(
     conversation.context = dict(context)
     flag_modified(conversation, "context")
     flag_modified(conversation, "messages")
-    await db.commit()
+    await db.flush()
 
     await set_json(
         f"conversation:{session_id}",

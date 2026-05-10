@@ -2,9 +2,15 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { Save, Lock, User, Info } from "lucide-react";
 import { useAuth } from "@/components/Layout/AuthProvider";
 import { useToast } from "@/components/UI/Toast";
 import { user as userApi } from "@/lib/api";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/UI/card";
+import { Input } from "@/components/UI/input";
+import { Label } from "@/components/UI/label";
+import { Button } from "@/components/UI/button";
+import { motion } from "motion/react";
 
 export default function SettingsPage() {
   const { user, loading, refreshUser } = useAuth();
@@ -14,7 +20,6 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [changed, setChanged] = useState(false);
 
-  // Password state
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -26,9 +31,13 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full" />
-      </div>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="min-h-screen flex items-center justify-center bg-background"
+      >
+        <div className="animate-spin w-8 h-8 border-2 border-fuchsia-600 border-t-transparent rounded-full" />
+      </motion.div>
     );
   }
 
@@ -60,11 +69,7 @@ export default function SettingsPage() {
     if (newPassword !== confirmPassword) { toast("两次输入的密码不一致", "error"); return; }
     setChangingPassword(true);
     try {
-      const resp = await userApi.changePassword(oldPassword, newPassword);
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ detail: "修改失败" }));
-        throw new Error(err.detail || "修改失败");
-      }
+      await userApi.changePassword(oldPassword, newPassword);
       toast("密码修改成功", "success");
       setOldPassword("");
       setNewPassword("");
@@ -76,96 +81,121 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
-      <div className="max-w-lg mx-auto px-4 py-8">
-        <h1 className="text-xl font-bold mb-6">设置</h1>
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className="min-h-screen bg-background"
+    >
+      <div className="max-w-lg mx-auto px-4 py-8 space-y-6">
+        <h1 className="text-xl font-bold text-foreground">设置</h1>
 
         {/* Profile Section */}
-        <div className="bg-white dark:bg-slate-800 rounded-lg border dark:border-slate-700 p-5 space-y-5">
-          <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300">个人资料</h2>
-
-          {/* Username (read-only) */}
-          <div>
-            <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">用户名</label>
-            <input
-              type="text"
-              value={user.username}
-              disabled
-              className="w-full px-3 py-2 text-sm border dark:border-slate-700 rounded-lg bg-gray-50 dark:bg-slate-900 text-gray-400 dark:text-gray-500"
-            />
-          </div>
-
-          {/* Display Name */}
-          <div>
-            <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">显示名称</label>
-            <input
-              type="text"
-              value={displayName}
-              onChange={(e) => { setDisplayName(e.target.value); setChanged(true); }}
-              placeholder="输入显示名称"
-              className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:border-blue-400"
-            />
-          </div>
-
-          <button
-            onClick={handleSave}
-            disabled={saving || !changed}
-            className="w-full py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
-          >
-            {saving ? "保存中..." : "保存"}
-          </button>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <User className="h-4 w-4 text-fuchsia-600 dark:text-fuchsia-400" />
+              个人资料
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="username">用户名</Label>
+              <Input
+                id="username"
+                type="text"
+                value={user.username}
+                disabled
+                className="bg-muted text-muted-foreground"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="displayName">显示名称</Label>
+              <Input
+                id="displayName"
+                type="text"
+                value={displayName}
+                onChange={(e) => { setDisplayName(e.target.value); setChanged(true); }}
+                placeholder="输入显示名称"
+              />
+            </div>
+            <Button
+              onClick={handleSave}
+              disabled={saving || !changed}
+              className="w-full"
+            >
+              <Save className="mr-2 h-4 w-4" />
+              {saving ? "保存中..." : "保存"}
+            </Button>
+          </CardContent>
+        </Card>
 
         {/* Password Section */}
-        <div className="mt-6 bg-white dark:bg-slate-800 rounded-lg border dark:border-slate-700 p-5 space-y-4">
-          <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300">修改密码</h2>
-          <div>
-            <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">原密码</label>
-            <input
-              type="password"
-              value={oldPassword}
-              onChange={(e) => setOldPassword(e.target.value)}
-              placeholder="输入原密码"
-              className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:border-blue-400"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">新密码</label>
-            <input
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="至少6个字符"
-              className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:border-blue-400"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">确认新密码</label>
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="再次输入新密码"
-              className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:border-blue-400"
-            />
-          </div>
-          <button
-            onClick={handlePasswordChange}
-            disabled={changingPassword}
-            className="w-full py-2 text-sm font-medium border border-gray-300 dark:border-slate-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-50 transition"
-          >
-            {changingPassword ? "修改中..." : "修改密码"}
-          </button>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Lock className="h-4 w-4 text-fuchsia-600 dark:text-fuchsia-400" />
+              修改密码
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="oldPassword">原密码</Label>
+              <Input
+                id="oldPassword"
+                type="password"
+                value={oldPassword}
+                onChange={(e) => setOldPassword(e.target.value)}
+                placeholder="输入原密码"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="newPassword">新密码</Label>
+              <Input
+                id="newPassword"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="至少6个字符"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">确认新密码</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="再次输入新密码"
+              />
+            </div>
+            <Button
+              onClick={handlePasswordChange}
+              disabled={changingPassword}
+              variant="outline"
+              className="w-full"
+            >
+              <Lock className="mr-2 h-4 w-4" />
+              {changingPassword ? "修改中..." : "修改密码"}
+            </Button>
+          </CardContent>
+        </Card>
 
-        {/* Account info */}
-        <div className="mt-6 bg-white dark:bg-slate-800 rounded-lg border dark:border-slate-700 p-5">
-          <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">账号信息</h2>
-          <div className="text-sm text-gray-400 dark:text-gray-500 space-y-1">
-            <p>注册时间: {new Date(user.created_at).toLocaleDateString("zh-CN")}</p>
-          </div>
-        </div>
+        {/* Account Info */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Info className="h-4 w-4 text-muted-foreground" />
+              账号信息
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              注册时间: {new Date(user.created_at).toLocaleDateString("zh-CN")}
+            </p>
+          </CardContent>
+        </Card>
       </div>
-    </div>
+    </motion.div>
   );
 }

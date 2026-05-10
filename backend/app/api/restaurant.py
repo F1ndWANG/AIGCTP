@@ -52,7 +52,7 @@ async def save_restaurant_recommendation(
     return record
 
 
-@router.post("/recommend")
+@router.post("/recommend", summary="Recommend restaurants")
 async def restaurant_recommend(
     payload: RecommendRequest,
     current_user: User = Depends(get_current_user),
@@ -64,6 +64,7 @@ async def restaurant_recommend(
         user_message=f"推荐{payload.city}的{' '.join(payload.dietary_restrictions or [])}餐厅",
         dietary_restrictions=payload.dietary_restrictions,
         cuisine=payload.cuisine,
+        db=db,
     ))
     record = await save_restaurant_recommendation(
         db=db,
@@ -78,7 +79,7 @@ async def restaurant_recommend(
     return result
 
 
-@router.post("/nearby")
+@router.post("/nearby", summary="Recommend nearby restaurants")
 async def restaurant_nearby(
     payload: NearbyRequest,
     current_user: User = Depends(get_current_user),

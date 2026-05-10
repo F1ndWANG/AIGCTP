@@ -1,0 +1,11 @@
+{
+  "name": "aigctp-promo-video",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "set \"HYPERFRAMES_BROWSER_PATH=C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe\" && npx --yes hyperframes@0.5.3 preview",
+    "check": "set \"HYPERFRAMES_BROWSER_PATH=C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe\" && npx --yes hyperframes@0.5.3 lint && npx --yes hyperframes@0.5.3 validate && npx --yes hyperframes@0.5.3 inspect",
+    "render": "set \"HYPERFRAMES_BROWSER_PATH=C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe\" && npx --yes hyperframes@0.5.3 render",
+    "publish": "npx --yes hyperframes@0.5.3 publish"
+  }
+}
