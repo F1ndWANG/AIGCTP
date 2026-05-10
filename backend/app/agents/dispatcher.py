@@ -16,6 +16,7 @@ from app.agents.domain_results import to_legacy_payload
 from app.models.diet import HealthProfile, MealRecord
 from app.services.context_builder import build_preferences
 from app.services.llm import llm_service
+from app.services.progress import ProgressReporter
 from app.services.travel_text import (
     DEFAULT_CITY,
     KNOWN_CITIES,

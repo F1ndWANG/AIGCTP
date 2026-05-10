@@ -5,11 +5,11 @@ Recommends restaurants based on city, preferences, location, and dietary restric
 Leverages existing Amap search_restaurants and search_around APIs.
 """
 import json
-from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.llm import llm_service
+from app.services.amap import amap_service
 from app.agents.tools.poi_tools import search_restaurants as poi_search_restaurants
 from app.agents.domain_results import RestaurantAgentResult
 from app.core.logging import get_logger
@@ -49,7 +49,6 @@ async def recommend_restaurants(
         if db is not None:
             restaurants = await poi_search_restaurants(db, city, cuisine=cuisine, limit=20)
         else:
-            from app.services.amap import amap_service
             restaurants = await amap_service.search_restaurants(city, keywords=cuisine or None, page_size=20)
     except Exception as e:
         logger.warning("Restaurant search failed: %s", e)

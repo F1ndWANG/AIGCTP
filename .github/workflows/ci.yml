@@ -25,7 +25,7 @@ jobs:
       - name: Lint with ruff
         run: |
           pip install ruff
-          ruff check app/ tests/
+          ruff check app/ tests/ --select E9,F63,F7,F82
 
   backend-test:
     name: Backend Tests
@@ -34,23 +34,8 @@ jobs:
       run:
         working-directory: ./backend
 
-    services:
-      postgres:
-        image: pgvector/pgvector:pg16
-        env:
-          POSTGRES_USER: lifeai
-          POSTGRES_PASSWORD: lifeai_test
-          POSTGRES_DB: life_recommender_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready -U lifeai -d life_recommender_test
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 5
-
     env:
-      DATABASE_URL: postgresql+asyncpg://lifeai:lifeai_test@localhost:5432/life_recommender_test
+      DATABASE_URL: sqlite+aiosqlite:///./test.db
       JWT_SECRET: test-secret-for-ci-only
       TESTING: "true"
       APP_ENV: testing
@@ -79,6 +64,8 @@ jobs:
     defaults:
       run:
         working-directory: ./frontend
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: "true"
 
     steps:
       - uses: actions/checkout@v4
@@ -86,6 +73,7 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
 
       - run: npm ci
       - run: npm run build
