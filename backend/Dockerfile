@@ -6,7 +6,7 @@ RUN pip install --no-cache-dir --user -r requirements.txt
 FROM python:3.12-slim AS runtime
 WORKDIR /app
 
-RUN addgroup --system app && adduser --system --group app
+RUN groupadd --system app && useradd --system --gid app --create-home app
 
 ENV PATH=/root/.local/bin:$PATH PYTHONUNBUFFERED=1
 
