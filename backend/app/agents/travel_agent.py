@@ -104,26 +104,82 @@ def _merge_weather_into_itinerary(itinerary: dict, weather: list[dict]) -> None:
 
 def _sanitize_theme(itinerary: dict, destination: str) -> None:
     """Ensure itinerary theme is meaningful, not a generic placeholder."""
+    _remove_non_poi_activities(itinerary, destination)
     theme = (itinerary.get("theme") or "").strip()
     generic = {"", "行程", "调整后的行程", "修改后的行程", "调整", "修改",
                "新行程", "新调整", "调整后行程", "修改后行程",
-               "围绕调整后的行程", "围绕修改后的行程"}
-    if theme in generic:
-        day_by_day = itinerary.get("day_by_day", []) or []
-        first_poi = ""
-        if day_by_day:
-            for act in day_by_day[0].get("activities", []) or []:
-                if act.get("poi"):
-                    first_poi = act["poi"]
-                    break
-        itinerary["theme"] = f"{destination}{first_poi}探索之旅" if first_poi else f"{destination}探索之旅"
+               "围绕调整后的行程", "围绕修改后的行程", f"{destination}探索之旅",
+               f"{destination}{itinerary.get('days', '')}日游", f"{destination}1日游"}
+    if theme in generic or "规划" in theme:
+        itinerary["theme"] = _theme_from_activities(itinerary, destination)
 
     for i, day in enumerate(itinerary.get("day_by_day", []) or []):
         dt = (day.get("theme") or "").strip()
-        if not dt or dt in {"", "调整", "修改", "探索", "游玩", "调整后", "修改后"}:
+        if not dt or dt in {"", "调整", "修改", "探索", "游玩", "调整后", "修改后"} or "规划" in dt:
             day_num = day.get("day", i + 1)
             acts = day.get("activities", []) or []
-            day["theme"] = f"第{day_num}天·{acts[0]['poi']}" if (acts and acts[0].get("poi")) else f"第{day_num}天"
+            if acts and acts[0].get("poi"):
+                day["theme"] = f"{acts[0]['poi']}主题探索" if len(acts) == 1 else f"{acts[0]['poi']}到{acts[-1].get('poi', acts[0]['poi'])}"
+            else:
+                day["theme"] = f"第{day_num}天"
+
+
+def _is_non_poi_activity_name(name: str, destination: str) -> bool:
+    normalized = _normalize_poi_name(name)
+    if not normalized:
+        return True
+    planning_prefixes = ("规划", "安排", "生成", "制定", "设计")
+    if any(normalized.startswith(f"{prefix}{_normalize_poi_name(destination)}") for prefix in planning_prefixes):
+        return True
+    return normalized in {_normalize_poi_name(destination), f"{_normalize_poi_name(destination)}一日游"}
+
+
+def _remove_non_poi_activities(itinerary: dict, destination: str) -> None:
+    for day in itinerary.get("day_by_day", []) or []:
+        activities = day.get("activities", []) or []
+        day["activities"] = [
+            act for act in activities
+            if not _is_non_poi_activity_name(str(act.get("poi", "")), destination)
+        ]
+
+
+def _activity_names(itinerary: dict, *, limit: int = 3) -> list[str]:
+    names: list[str] = []
+    for day in itinerary.get("day_by_day", []) or []:
+        for act in day.get("activities", []) or []:
+            name = str(act.get("poi", "")).strip()
+            if name and name not in names:
+                names.append(name)
+                if len(names) >= limit:
+                    return names
+    return names
+
+
+def _theme_from_activities(itinerary: dict, destination: str) -> str:
+    names = _activity_names(itinerary, limit=3)
+    if len(names) >= 2:
+        return f"{names[0]}、{names[1]}经典路线"
+    if names:
+        return f"{destination}{names[0]}深度探索"
+    return f"{destination}经典一日游"
+
+
+def _estimate_budget(days: int, restaurants: list[dict] | None = None, hotels: list[dict] | None = None) -> dict:
+    food = 140 * max(days, 1)
+    transport = 40 * max(days, 1)
+    tickets = 120 * max(days, 1)
+    hotel = 0 if days <= 1 else 520 * (days - 1)
+    if hotels and days > 1:
+        hotel = max(hotel, 500 * (days - 1))
+    total = food + transport + tickets + hotel
+    breakdown = {
+        "餐饮": f"约 ¥{food}",
+        "市内交通": f"约 ¥{transport}",
+        "门票/预约": f"约 ¥{tickets}",
+    }
+    if hotel:
+        breakdown["住宿"] = f"约 ¥{hotel}"
+    return {"total": f"约 ¥{total}/人", "breakdown": breakdown}
 
 
 # ═══════════════════════════════════════════
@@ -270,6 +326,9 @@ def _infer_requested_pois(instruction: str) -> list[str]:
             raw = re.split(r"[，。,.!！?？；;]|然后|再|顺便|但是|不过", raw)[0]
             for part in re.split(r"[、/]|和|与|及|\s+", raw):
                 name = part.strip("，。,.!！?？ ")
+                for prefix in ("帮我", "请", "规划", "安排", "制定", "生成", "设计"):
+                    if name.startswith(prefix) and len(name) > len(prefix) + 1:
+                        name = name[len(prefix):]
                 for stop in stop_words:
                     if name.endswith(stop):
                         name = name[:-len(stop)]
@@ -399,18 +458,39 @@ def _should_use_fast_itinerary(days: int, original_message: str) -> bool:
     return any(m in original_message for m in ("半日游", "一日游", "1日游", "一天", "当天往返"))
 
 
-def _fallback_itinerary(destination: str, days: int, pois: list[dict]) -> dict:
+def _fallback_itinerary(
+    destination: str,
+    days: int,
+    pois: list[dict],
+    restaurants: list[dict] | None = None,
+    hotels: list[dict] | None = None,
+) -> dict:
     day_by_day = []
     safe_pois = _dedupe_pois(pois)
+    restaurants = restaurants or []
+    hotels = hotels or []
     for d in range(1, days + 1):
         day_pois = safe_pois[(d - 1) * 3:d * 3] if safe_pois else []
+        lunch = restaurants[(d - 1) % len(restaurants)] if restaurants else {}
+        dinner = restaurants[d % len(restaurants)] if restaurants else {}
+        hotel = hotels[(d - 1) % len(hotels)] if hotels else {}
+        first = day_pois[0].get("name") if day_pois else ""
+        last = day_pois[-1].get("name") if len(day_pois) > 1 else first
         day_by_day.append({
             "day": d,
-            "theme": f"第{d}天探索",
+            "theme": f"{first}到{last}" if first and last and first != last else (f"{destination}{first}探索" if first else f"第{d}天探索"),
             "weather": {"condition": "适中"},
             "meals": [
-                {"type": "午餐", "recommendation": "品尝当地特色美食", "restaurant": "附近餐厅"},
-                {"type": "晚餐", "recommendation": "体验当地美食", "restaurant": "当地特色餐厅"},
+                {
+                    "type": "午餐",
+                    "recommendation": lunch.get("reason") or "品尝当地特色美食",
+                    "restaurant": lunch.get("name") or "附近特色餐厅",
+                },
+                {
+                    "type": "晚餐",
+                    "recommendation": dinner.get("reason") or "体验当地美食",
+                    "restaurant": dinner.get("name") or "当地特色餐厅",
+                },
             ],
             "activities": [
                 {"time": ["上午", "下午", "晚上"][i] if i < 3 else "其他",
@@ -419,15 +499,21 @@ def _fallback_itinerary(destination: str, days: int, pois: list[dict]) -> dict:
                 for i, p in enumerate(day_pois)
             ],
             "shopping": [],
-            "hotel": {"name": f"{destination}推荐酒店", "price_level": "舒适",
-                      "reason": "地理位置便利，交通方便", "tips": "建议提前预订"},
+            "hotel": {
+                "name": hotel.get("name") or f"{destination}核心商圈舒适型酒店",
+                "price_level": hotel.get("price_level") or "约 ¥350-700/晚",
+                "reason": hotel.get("reason") or "建议住在核心商圈或地铁换乘站附近，减少短途行程通勤时间。",
+                "tips": hotel.get("tips") or "优先选择近地铁、可寄存行李、可免费取消、评分 4.5+ 的房型。",
+            },
             "transport_tips": "建议乘坐公共交通",
         })
-    return {
-        "destination": destination, "days": days, "theme": f"{destination}{days}日游",
-        "day_by_day": day_by_day, "budget_estimate": {"total": "待定"},
-        "tips": [f"建议提前查看{destination}天气预报", "提前预订住宿可获得更优惠价格"],
+    itinerary = {
+        "destination": destination, "days": days, "theme": f"{destination}经典一日游",
+        "day_by_day": day_by_day, "budget_estimate": _estimate_budget(days, restaurants, hotels),
+        "tips": [f"建议提前查看{destination}天气预报", "热门景区请提前确认开放时间和预约要求"],
     }
+    itinerary["theme"] = _theme_from_activities(itinerary, destination)
+    return itinerary
 
 
 def _fallback_summary(destination: str, days: int, itinerary: dict, weather: list[dict]) -> str:
@@ -480,13 +566,14 @@ async def plan_trip(
 
     # Fast path: small trips use deterministic planning
     if _should_use_fast_itinerary(days, original_message):
-        itinerary = _fallback_itinerary(destination, days, pois)
+        itinerary = _fallback_itinerary(destination, days, pois, restaurants, hotels)
         requested_pois = [p for p in _infer_requested_pois(original_message)
                           if _normalize_poi_name(p) != _normalize_poi_name(destination)]
         if requested_pois:
             _ensure_requested_pois(itinerary, requested_pois, original_message)
         _dedupe_itinerary_activities(itinerary)
         _merge_weather_into_itinerary(itinerary, weather)
+        _sanitize_theme(itinerary, destination)
         summary = _fallback_summary(destination, days, itinerary, weather)
         if requested_pois:
             summary = f"已将 {', '.join(requested_pois)} 同步到行程卡。\n\n{summary}"
@@ -523,7 +610,7 @@ async def plan_trip(
         itinerary = None
 
     if not isinstance(itinerary, dict) or not itinerary.get("day_by_day"):
-        itinerary = _fallback_itinerary(destination, days, pois)
+        itinerary = _fallback_itinerary(destination, days, pois, restaurants, hotels)
         if not summary:
             summary = _fallback_summary(destination, days, itinerary, weather)
 
@@ -535,6 +622,7 @@ async def plan_trip(
     if avoid_pois and _itinerary_contains_pois(itinerary, avoid_pois):
         _strip_excluded_activities(itinerary, avoid_pois)
         _fill_itinerary_activities(itinerary, pois, avoid_pois)
+    _sanitize_theme(itinerary, destination)
 
     return TravelAgentResult(response=summary, travel_plan=TravelPlanArtifact(
         destination=destination, days=days, itinerary=itinerary, preferences=user_preferences,
@@ -623,7 +711,7 @@ async def adjust_plan(
             prompt += "\n\n请确保输出完整的 JSON 代码块。"
 
     if not isinstance(itinerary, dict) or not itinerary.get("day_by_day"):
-        itinerary = _fallback_itinerary(destination, days, safe_pois)
+        itinerary = _fallback_itinerary(destination, days, safe_pois, restaurants, [])
         itinerary["theme"] = f"{destination}调整后行程"
         if not summary:
             summary = _fallback_summary(destination, days, itinerary, weather)

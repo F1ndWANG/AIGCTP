@@ -21,7 +21,7 @@ interface TravelPlanCardProps {
 }
 
 export default function TravelPlanCard({ plan, onView, onConfirm, confirming }: TravelPlanCardProps) {
-  const itinerary = plan.itinerary;
+  const itinerary = normalizeItinerary(plan.itinerary, plan.destination, plan.days);
   const { toast } = useToast();
   const [selectedPoi, setSelectedPoi] = useState<string | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -173,6 +173,88 @@ export default function TravelPlanCard({ plan, onView, onConfirm, confirming }: 
       )}
     </div>
   );
+}
+
+function isBadActivityName(name: string, destination: string): boolean {
+  const normalized = name.replace(/[\s\-·・—_()（）《》【】\[\]]+/g, "");
+  const dest = destination.replace(/[\s\-·・—_()（）《》【】\[\]]+/g, "");
+  if (!normalized) return true;
+  return ["规划", "安排", "生成", "制定", "设计"].some((prefix) => normalized.startsWith(`${prefix}${dest}`));
+}
+
+function routeTheme(itinerary: TravelPlanItinerary, destination: string): string {
+  const names: string[] = [];
+  itinerary.day_by_day?.forEach((day) => {
+    day.activities?.forEach((act) => {
+      if (act.poi && !names.includes(act.poi)) names.push(act.poi);
+    });
+  });
+  if (names.length >= 2) return `${names[0]}、${names[1]}经典路线`;
+  if (names.length === 1) return `${destination}${names[0]}深度探索`;
+  return `${destination}经典一日游`;
+}
+
+function estimatedBudget(days: number): TravelPlanItinerary["budget_estimate"] {
+  const safeDays = Math.max(days, 1);
+  const food = 140 * safeDays;
+  const traffic = 40 * safeDays;
+  const tickets = 120 * safeDays;
+  const hotel = safeDays > 1 ? 520 * (safeDays - 1) : 0;
+  return {
+    total: `约 ¥${food + traffic + tickets + hotel}/人`,
+    breakdown: {
+      餐饮: `约 ¥${food}`,
+      市内交通: `约 ¥${traffic}`,
+      "门票/预约": `约 ¥${tickets}`,
+      ...(hotel ? { 住宿: `约 ¥${hotel}` } : {}),
+    },
+  };
+}
+
+function normalizeItinerary(
+  itinerary: TravelPlanItinerary | undefined,
+  destination: string,
+  days: number,
+): TravelPlanItinerary | undefined {
+  if (!itinerary?.day_by_day) return itinerary;
+  const next: TravelPlanItinerary = {
+    ...itinerary,
+    day_by_day: itinerary.day_by_day.map((day) => {
+      const activities = (day.activities || []).filter((act) => !isBadActivityName(act.poi, destination));
+      const genericHotel = !day.hotel?.name || day.hotel.name === `${destination}推荐酒店`;
+      return {
+        ...day,
+        activities,
+        hotel: genericHotel
+          ? {
+              name: `${destination}核心商圈舒适型酒店`,
+              price_level: "约 ¥350-700/晚",
+              reason: "建议住在核心商圈或地铁换乘站附近，减少短途行程通勤时间。",
+              tips: "优先选择近地铁、可寄存行李、可免费取消、评分 4.5+ 的房型。",
+            }
+          : day.hotel,
+      };
+    }),
+  };
+  const genericTheme = !next.theme || next.theme === `${destination}1日游` || next.theme === `${destination}${days}日游` || next.theme.includes("规划");
+  if (genericTheme) {
+    next.theme = routeTheme(next, destination);
+  }
+  next.day_by_day = next.day_by_day.map((day) => {
+    const genericDayTheme = !day.theme || day.theme.includes("规划") || day.theme === `第${day.day}天探索`;
+    return {
+      ...day,
+      theme: genericDayTheme && day.activities?.length
+        ? day.activities.length > 1
+          ? `${day.activities[0].poi}到${day.activities[day.activities.length - 1].poi}`
+          : `${destination}${day.activities[0].poi}探索`
+        : day.theme,
+    };
+  });
+  if (!next.budget_estimate?.total || next.budget_estimate.total === "待定") {
+    next.budget_estimate = estimatedBudget(days);
+  }
+  return next;
 }
 
 function DayCard({

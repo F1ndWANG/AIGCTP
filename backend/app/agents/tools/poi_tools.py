@@ -3,7 +3,7 @@ import json
 from typing import Optional
 
 from app.services.amap import amap_service
-from app.services.demo_places import demo_restaurants, demo_scenic_spots, has_real_amap_key
+from app.services.demo_places import demo_hotels, demo_restaurants, demo_scenic_spots, has_real_amap_key
 from app.models.cache import CachedPOI
 from app.core.cache import get_list, set_list
 from app.core.config import settings
@@ -170,12 +170,18 @@ async def search_restaurants(
 
 async def search_hotels(db: AsyncSession, city: str, limit: int = 10) -> list[dict]:
     """搜索酒店（带 Redis 缓存）"""
+    if not has_real_amap_key(settings.AMAP_API_KEY):
+        return demo_hotels(city, limit)
+
     cache_key = f"hotel:search:{city}:{limit}"
     cached = await get_list(cache_key)
     if cached:
         return cached[:limit]
 
-    pois = await amap_service.search_hotels(city, page_size=limit)
+    try:
+        pois = await amap_service.search_hotels(city, page_size=limit)
+    except Exception:
+        pois = demo_hotels(city, limit)
     result = [
         {
             "name": p["name"],
@@ -184,6 +190,9 @@ async def search_hotels(db: AsyncSession, city: str, limit: int = 10) -> list[di
             "tags": p.get("tags", []),
             "longitude": p.get("longitude"),
             "latitude": p.get("latitude"),
+            "price_level": p.get("price_level"),
+            "reason": p.get("reason"),
+            "tips": p.get("tips"),
         }
         for p in pois
     ]
