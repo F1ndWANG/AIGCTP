@@ -1,5 +1,4 @@
 """Tests for database initialization."""
-import pytest
 from app.core.database import Base
 
 

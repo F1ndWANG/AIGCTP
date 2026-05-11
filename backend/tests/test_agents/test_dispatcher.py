@@ -7,7 +7,6 @@ from app.agents.dispatcher import (
     _is_plan_query,
     _answer_plan_query,
     thinking_label_for_intent,
-    THINKING_LABELS,
 )
 
 
@@ -197,7 +196,7 @@ class TestDispatcherDispatch:
                 "to_legacy": lambda self: {"response": self.response, "travel_plan": self.travel_plan},
             })()
             mock_merge.return_value = {"response": "ok", "travel_plan": {"destination": "北京", "days": 3}}
-            result = await dispatcher.dispatch(**base_kwargs)
+            await dispatcher.dispatch(**base_kwargs)
             # plan_trip should be called with extracted destination and default 3 days
             call_kwargs = mock_plan.call_args.kwargs
             assert call_kwargs["days"] == 3  # extracted from message
@@ -219,8 +218,7 @@ class TestLoadRecentMealRecords:
         mock_result.scalars.return_value.all.return_value = [mock_record]
         mock_db.execute = AsyncMock(return_value=mock_result)
 
-        from app.models.diet import MealRecord
-        with patch("app.agents.dispatcher.select", return_value=MagicMock()) as mock_select:
+        with patch("app.agents.dispatcher.select", return_value=MagicMock()):
             records = await dispatcher._load_recent_meal_records(1, mock_db, limit=10)
             assert len(records) == 1
 

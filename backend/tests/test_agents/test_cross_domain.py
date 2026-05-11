@@ -1,6 +1,6 @@
 """Tests for cross_domain_composer — post-travel product enrichment."""
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from app.agents.cross_domain import CrossDomainComposer
 

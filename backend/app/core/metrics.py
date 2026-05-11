@@ -7,7 +7,6 @@ Exposes:
 - Cache hit/miss counters
 """
 import time
-from typing import Optional
 
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 from fastapi import Request, Response

@@ -1,6 +1,6 @@
 """Route planning API — get directions between two points."""
 
-from math import sin, cos, sqrt, fabs, atan2, pi
+from math import sin, cos, sqrt, fabs, pi
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel

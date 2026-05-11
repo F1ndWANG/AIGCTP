@@ -3,13 +3,17 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy import text as sa_text
 
+from app.api import auth, users, travel, chat, route, diet, commerce, feedback, restaurant, runtime
 from app.core.config import settings
 from app.core.database import async_session, init_db
-from app.core.redis import close_redis, get_redis
 from app.core.logging import setup_logging, get_logger
-from app.api import auth, users, travel, chat, route, diet, commerce, feedback, restaurant, runtime
+from app.core.metrics import MetricsMiddleware, metrics_endpoint
+from app.core.redis import close_redis, get_redis
 from app.middleware.rate_limit import RateLimitMiddleware
+from app.middleware.request_size import RequestSizeLimitMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.services.demo_catalog import ensure_demo_catalog
 
@@ -67,12 +71,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-from app.middleware.request_size import RequestSizeLimitMiddleware
 app.add_middleware(RequestSizeLimitMiddleware)
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
-
-from app.core.metrics import MetricsMiddleware
 app.add_middleware(MetricsMiddleware)
 
 
@@ -100,8 +101,6 @@ app.include_router(runtime.router, prefix="/api/v1")
 
 @app.get("/api/v1/metrics")
 async def metrics():
-    from app.core.metrics import metrics_endpoint
-    from fastapi import Request
     return await metrics_endpoint(Request({"type": "http", "method": "GET", "path": "/api/v1/metrics"}))
 
 
@@ -114,8 +113,6 @@ async def health():
 @app.get("/api/v1/health/ready")
 async def health_ready():
     """Readiness probe: checks DB and Redis connectivity."""
-    from sqlalchemy import text as sa_text
-
     checks = {"database": False, "redis": False}
 
     # Check database
@@ -139,7 +136,6 @@ async def health_ready():
     redis_required = settings.is_production
     all_healthy = checks["database"] and (checks["redis"] or not redis_required)
     status_code = 200 if all_healthy else 503
-    from fastapi.responses import JSONResponse
 
     return JSONResponse(
         content={
@@ -158,7 +154,7 @@ async def health_llm():
     import asyncio
     try:
         from app.services.llm import llm_service
-        ok = await asyncio.wait_for(
+        await asyncio.wait_for(
             llm_service.client.chat.completions.create(
                 model=llm_service.model,
                 messages=[{"role": "user", "content": "ping"}],
@@ -168,7 +164,6 @@ async def health_llm():
             ),
             timeout=8,
         )
-        text = ok.choices[0].message.content if ok.choices else ""
         return {
             "status": "ok",
             "model": llm_service.model,

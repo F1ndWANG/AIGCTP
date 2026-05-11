@@ -1,5 +1,4 @@
 """Tests for prompt_builder — LLM prompt formatting helpers."""
-import pytest
 
 from app.agents.prompt_builder import (
     _format_poi_list,

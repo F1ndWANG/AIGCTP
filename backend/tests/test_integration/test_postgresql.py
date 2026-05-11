@@ -25,7 +25,6 @@ from app.core.database import Base
 from app.models.user import User
 from app.models.conversation import Conversation
 from app.models.travel import TravelPlan
-from app.models.diet import DietPlan
 from app.models.runtime import TaskRun, DomainEvent
 from app.models.feedback import RecommendationLog
 

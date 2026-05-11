@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime, JSON, Float
 
 from app.core.database import Base, _utcnow

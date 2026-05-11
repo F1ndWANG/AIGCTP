@@ -2,8 +2,7 @@ from datetime import datetime, date
 from typing import Optional, Any
 from pydantic import BaseModel, Field
 
-from app.schemas.commerce import CartItemResponse, ProductListItem
-from app.schemas.diet import DietPlanResponse
+from app.schemas.commerce import ProductListItem
 from app.schemas.restaurant import RestaurantRecommendationResponse
 
 

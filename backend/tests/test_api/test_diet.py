@@ -1,5 +1,4 @@
 """Tests for diet API: health profile, meal records, diet plans."""
-import pytest
 
 
 class TestHealthProfile:

@@ -1,5 +1,4 @@
 """Tests for travel plans API."""
-import pytest
 
 
 class TestListPlans:

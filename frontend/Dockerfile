@@ -1,9 +1,10 @@
 # ── Build Stage ──
 FROM node:20-alpine AS builder
 WORKDIR /build
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm ci
 
 COPY . .
 RUN npm run build
@@ -12,7 +13,7 @@ RUN npm run build
 FROM node:20-alpine AS runner
 WORKDIR /app
 
-RUN addgroup --system app && adduser --system --group app
+RUN addgroup -S app && adduser -S app -G app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

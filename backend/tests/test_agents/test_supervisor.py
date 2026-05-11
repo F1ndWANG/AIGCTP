@@ -1,5 +1,4 @@
 """Tests for supervisor agent intent routing."""
-import pytest
 from unittest.mock import AsyncMock
 
 

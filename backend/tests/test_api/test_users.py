@@ -1,5 +1,4 @@
 """Tests for users API: profile and preferences."""
-import pytest
 
 
 class TestGetMe:

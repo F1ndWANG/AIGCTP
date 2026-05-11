@@ -1,5 +1,4 @@
 """Tests for security: password hashing, JWT token creation and verification."""
-import time
 from app.core.security import hash_password, verify_password, create_access_token, decode_access_token
 
 

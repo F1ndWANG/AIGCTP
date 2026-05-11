@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 from sqlalchemy import Column, Index, Integer, String, DateTime, JSON, ForeignKey, Float, Date
 from sqlalchemy.orm import relationship
 

@@ -7,8 +7,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  BACKEND_IMAGE: ghcr.io/${{ github.repository_owner }}/aigctp-backend
-  FRONTEND_IMAGE: ghcr.io/${{ github.repository_owner }}/aigctp-frontend
+  BACKEND_IMAGE: ghcr.io/f1ndwang/aigctp-backend
+  FRONTEND_IMAGE: ghcr.io/f1ndwang/aigctp-frontend
 
 jobs:
   build-and-push:
@@ -39,7 +39,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=ref,event=branch
-            type=sha,prefix=,suffix=,format=short
+            type=sha,prefix=,suffix=,format=long
 
       - name: Build and push backend
         uses: docker/build-push-action@v6
@@ -59,7 +59,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=ref,event=branch
-            type=sha,prefix=,suffix=,format=short
+            type=sha,prefix=,suffix=,format=long
 
       - name: Build and push frontend
         uses: docker/build-push-action@v6

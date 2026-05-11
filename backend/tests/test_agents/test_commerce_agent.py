@@ -1,6 +1,4 @@
 """Tests for commerce_agent — product formatting, keyword helpers, AI category."""
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.agents.commerce_agent import (
     _keyword_text,

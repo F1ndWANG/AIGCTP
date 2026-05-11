@@ -1,5 +1,4 @@
 """Tests for restaurant recommendation API."""
-import pytest
 
 
 class TestRestaurantRecommend:

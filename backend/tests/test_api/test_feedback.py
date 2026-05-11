@@ -1,5 +1,4 @@
 """Tests for feedback API: submit feedback, stats, analytics."""
-import pytest
 
 
 class TestSubmitFeedback:

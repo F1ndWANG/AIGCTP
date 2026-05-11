@@ -12,7 +12,6 @@ import hashlib
 import json
 import re
 import time
-from typing import Optional
 
 from openai import AsyncOpenAI
 from openai import (
@@ -20,8 +19,6 @@ from openai import (
     APIConnectionError,
     RateLimitError,
     InternalServerError,
-    AuthenticationError,
-    BadRequestError,
 )
 
 from app.core.config import settings
@@ -188,7 +185,7 @@ class LLMService:
         """Call LLM with retry, falling back to alternate model on failure."""
         try:
             return await self._call_with_retry(method_name, factory, max_retries=max_retries)
-        except (APITimeoutError, APIConnectionError, InternalServerError, RateLimitError, CircuitBreakerOpen) as e:
+        except (APITimeoutError, APIConnectionError, InternalServerError, RateLimitError, CircuitBreakerOpen):
             if self.fallback_model:
                 original_model = self.model
                 self.model = self.fallback_model

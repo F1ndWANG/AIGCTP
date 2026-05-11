@@ -156,7 +156,6 @@ async def commerce_recommend(
     keywords = intent.get("keywords", [user_message[:50]])
     category_name = intent.get("category", "")
     max_price = intent.get("max_price", 0)
-    tag_filter = intent.get("tags", [])
 
     # Step 2: Query products from DB
     query = select(Product).where(Product.status == "active")

@@ -10,7 +10,6 @@ Preference Learner - 从对话中学习用户偏好
   3. 达到阈值后批量写入 User.preferences
   4. 下次对话时注入上下文
 """
-import json
 from typing import Any
 
 from sqlalchemy import select

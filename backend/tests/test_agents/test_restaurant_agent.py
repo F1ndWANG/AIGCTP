@@ -1,6 +1,5 @@
 """Tests for restaurant_agent — restaurant recommendation and ranking."""
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 
 RANKING_RESPONSE = {

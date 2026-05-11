@@ -1,9 +1,12 @@
+import time as _time
 from datetime import datetime, timezone
+
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
+from app.core.logging import get_logger as _get_logger
 
 
 def _utcnow() -> datetime:
@@ -43,9 +46,6 @@ if settings.DATABASE_URL.startswith("sqlite"):
 
 
 # ── Slow Query Logging ─────────────────────────────────────────
-
-import time as _time
-from app.core.logging import get_logger as _get_logger
 
 _db_logger = _get_logger("app.core.database.slow_query")
 

@@ -1,5 +1,4 @@
 """Tests for route planning API."""
-import pytest
 
 
 class TestRoute:

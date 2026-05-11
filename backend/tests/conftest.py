@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
 )
 
-from app.core.config import settings
 from app.core.database import Base, get_db
 from app.main import app
 from app.core.security import create_access_token, hash_password

@@ -6,7 +6,6 @@ LLM 语义意图分类器 — Supervisor 路由的核心分类引擎
   2. LLM 语义分类（模糊/复杂/复合意图）
   3. 提取结构化参数（目的地、天数、菜系等）
 """
-import json
 import re
 from typing import Any
 
@@ -78,7 +77,6 @@ def keyword_intent_score(message: str, has_travel_plan: bool) -> dict | None:
         dict — {intent, extracted, composite_intents}
     """
     msg = message.strip()
-    extracted: dict[str, Any] = {}
 
     # 最高优先级：精确匹配
     if _quick_reorder_detection(msg):
