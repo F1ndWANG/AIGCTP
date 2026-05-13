@@ -30,12 +30,26 @@ jobs:
   backend-test:
     name: Backend Tests
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: lifeai
+          POSTGRES_PASSWORD: lifeai_ci
+          POSTGRES_DB: life_recommender_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lifeai -d life_recommender_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     defaults:
       run:
         working-directory: ./backend
 
     env:
-      DATABASE_URL: sqlite+aiosqlite:///./test.db
+      DATABASE_URL: postgresql+asyncpg://lifeai:lifeai_ci@localhost:5432/life_recommender_test
       JWT_SECRET: test-secret-for-ci-only
       TESTING: "true"
       APP_ENV: testing

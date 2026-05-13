@@ -45,14 +45,14 @@ async def pg_session():
     """Per-test PostgreSQL session with pre-test cleanup."""
     engine = create_async_engine(PG_URL, echo=False, pool_size=1)
 
-    # Clean all data before test
+    # Ensure schema exists before truncating. Fresh CI databases start empty.
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    # Clean all data before test.
     async with engine.begin() as conn:
         for table in reversed(Base.metadata.sorted_tables):
             await conn.execute(text(f"TRUNCATE TABLE {table.name} CASCADE"))
-
-    # Ensure schema exists
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
 
     conn = await engine.connect()
     session = AsyncSession(bind=conn, expire_on_commit=False)

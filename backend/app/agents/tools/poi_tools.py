@@ -150,6 +150,8 @@ async def search_restaurants(
         pois = await amap_service.search_restaurants(city, keywords=keywords, page_size=limit)
     except Exception:
         pois = demo_restaurants(city, cuisine, limit)
+    if not pois:
+        pois = demo_restaurants(city, cuisine, limit)
     result = [
         {
             "name": p["name"],

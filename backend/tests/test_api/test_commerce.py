@@ -167,6 +167,26 @@ class TestProducts:
         })
         assert resp.status_code == 401
 
+    async def test_generate_missing_product_images(self, client, auth_headers, seed_product, monkeypatch):
+        async def mock_generate(product):
+            return f"/generated-products/product-{product.id}.png"
+
+        monkeypatch.setattr("app.api.commerce.generate_product_image", mock_generate)
+
+        resp = await client.post(
+            "/api/v1/commerce/products/images/generate",
+            headers=auth_headers,
+            json={"product_ids": [seed_product.id]},
+        )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["items"][0]["image_url"] == f"/generated-products/product-{seed_product.id}.png"
+        assert data["items"][0]["generated"] is True
+
+        detail = await client.get(f"/api/v1/commerce/products/{seed_product.id}", headers=auth_headers)
+        assert detail.json()["image_urls"][0] == f"/generated-products/product-{seed_product.id}.png"
+
 
 class TestCart:
     async def test_get_empty_cart(self, client, auth_headers):
@@ -236,6 +256,21 @@ class TestCart:
             "product_id": 99999, "quantity": 1,
         })
         assert resp.status_code == 404
+
+    async def test_add_recommended_item_creates_product(self, client, auth_headers):
+        resp = await client.post("/api/v1/commerce/cart/recommended-item", headers=auth_headers, json={
+            "product_id": 99999,
+            "product_name": "京式糕点伴手礼",
+            "price": 79,
+            "reason": "适合带回家分享",
+            "quantity": 1,
+        })
+
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["product_name"] == "京式糕点伴手礼"
+        assert data["price"] == 79
+        assert data["quantity"] == 1
 
     async def test_update_cart_item_quantity(self, client, auth_headers, seed_product):
         add = await client.post("/api/v1/commerce/cart/items", headers=auth_headers, json={

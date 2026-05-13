@@ -48,6 +48,8 @@ Thumbs.db
 dist/
 build/
 *.tsbuildinfo
+frontend/public/sw.js
+frontend/public/generated-products/
 
 # ── Playwright / E2E ──
 frontend/e2e/.auth/

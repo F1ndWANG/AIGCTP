@@ -6,6 +6,7 @@ import { useAuth } from "@/components/Layout/AuthProvider";
 import { useToast } from "@/components/UI/Toast";
 import { commerce as api } from "@/lib/api";
 import { chatHref, withSession } from "@/lib/session";
+import { useRecommendationTracking } from "@/lib/useRecommendationTracking";
 import ProductCard from "@/components/Commerce/ProductCard";
 import { Card, CardContent } from "@/components/UI/card";
 import { Badge } from "@/components/UI/badge";
@@ -20,6 +21,7 @@ export default function ProductsPage() {
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
+  const { track } = useRecommendationTracking("products_page");
 
   // Filters
   const [categories, setCategories] = useState<Category[]>([]);
@@ -34,6 +36,7 @@ export default function ProductsPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
+  const [requestedImageIds, setRequestedImageIds] = useState<Set<number>>(new Set());
   const pageSize = 20;
 
   // Load categories once
@@ -55,9 +58,32 @@ export default function ProductsPage() {
       });
       setProducts(data.items);
       setTotal(data.total);
+      const missingGeneratedImages = data.items
+        .filter((product) => !product.image_urls?.some((url) => url.startsWith("/generated-products/")))
+        .map((product) => product.id)
+        .filter((id) => !requestedImageIds.has(id));
+      if (missingGeneratedImages.length > 0) {
+        setRequestedImageIds((prev) => new Set([...prev, ...missingGeneratedImages]));
+        api.generateProductImages(missingGeneratedImages)
+          .then((result) => {
+            const imageByProductId = new Map(
+              result.items
+                .filter((item) => item.image_url)
+                .map((item) => [item.product_id, item.image_url as string])
+            );
+            if (imageByProductId.size === 0) return;
+            setProducts((prev) => prev.map((product) => {
+              const imageUrl = imageByProductId.get(product.id);
+              if (!imageUrl) return product;
+              const existing = (product.image_urls || []).filter((url) => url !== imageUrl);
+              return { ...product, image_urls: [imageUrl, ...existing] };
+            }));
+          })
+          .catch(() => {});
+      }
     } catch { toast("加载商品失败", "error"); }
     setLoading(false);
-  }, [selectedCategory, keyword, minPrice, maxPrice, page, toast]);
+  }, [selectedCategory, keyword, minPrice, maxPrice, page, requestedImageIds, toast]);
 
   useEffect(() => { loadProducts(); }, [loadProducts]);
 
@@ -75,8 +101,25 @@ export default function ProductsPage() {
   const handleAddToCart = async (productId: number) => {
     try {
       await api.addCartItem({ product_id: productId, quantity: 1 });
+      track({
+        domain: "commerce",
+        item_type: "product",
+        item_id: productId,
+        event_type: "add_cart",
+      });
       toast("已加入购物车", "success");
     } catch { toast("加入购物车失败", "error"); }
+  };
+
+  const openProduct = (product: ProductListItem) => {
+    track({
+      domain: "commerce",
+      item_type: "product",
+      item_id: product.id,
+      event_type: "click",
+      context: { name: product.name },
+    });
+    router.push(withSession(`/products/${product.id}`));
   };
 
   if (authLoading) {
@@ -268,7 +311,7 @@ export default function ProductsPage() {
                   <div
                     key={product.id}
                     className="cursor-pointer"
-                    onClick={() => router.push(withSession(`/products/${product.id}`))}
+                    onClick={() => openProduct(product)}
                   >
                     <ProductCard
                       product={product}

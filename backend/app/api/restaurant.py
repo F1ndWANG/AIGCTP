@@ -12,6 +12,7 @@ from app.models.restaurant import RestaurantRecommendation
 from app.agents.restaurant_agent import recommend_restaurants, recommend_nearby
 from app.agents.domain_results import to_legacy_payload
 from app.schemas.restaurant import RestaurantRecommendationResponse, RestaurantSelectionRequest
+from app.services.recommendation import recommendation_service
 
 router = APIRouter(prefix="/restaurant", tags=["restaurant"])
 
@@ -59,12 +60,16 @@ async def restaurant_recommend(
     db: AsyncSession = Depends(get_db),
 ):
     """推荐指定城市的餐厅，并保存推荐列表。"""
+    cuisine_text = f"{payload.cuisine}菜系" if payload.cuisine else ""
+    restrictions_text = " ".join(payload.dietary_restrictions or [])
+    user_message = f"推荐{payload.city}的{cuisine_text}{restrictions_text}餐厅".strip()
     result = to_legacy_payload(await recommend_restaurants(
         city=payload.city,
-        user_message=f"推荐{payload.city}的{' '.join(payload.dietary_restrictions or [])}餐厅",
+        user_message=user_message,
         dietary_restrictions=payload.dietary_restrictions,
         cuisine=payload.cuisine,
         db=db,
+        user_id=current_user.id,
     ))
     record = await save_restaurant_recommendation(
         db=db,
@@ -155,6 +160,17 @@ async def select_recommendation_restaurant(
     if not record:
         raise HTTPException(status_code=404, detail="Restaurant recommendation not found")
     record.selected_restaurant = payload.restaurant
+    await recommendation_service.track(
+        db,
+        user_id=current_user.id,
+        domain="restaurant",
+        item_type="restaurant",
+        item_id=payload.restaurant.get("id") or payload.restaurant.get("poi_id") or payload.restaurant.get("name") or recommendation_id,
+        event_type="select",
+        context={"recommendation_id": recommendation_id, "restaurant": payload.restaurant},
+        session_id=record.session_id,
+        commit=False,
+    )
     await db.commit()
     await db.refresh(record)
     return RestaurantRecommendationResponse.model_validate(record)

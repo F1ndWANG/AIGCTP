@@ -32,6 +32,21 @@ class TestRestaurantRecommend:
         data = resp.json()
         assert data["city"] == "北京"
 
+    async def test_recommend_uses_cuisine_when_map_has_no_result(self, client, auth_headers, monkeypatch):
+        async def mock_empty_restaurants(*args, **kwargs):
+            return []
+
+        monkeypatch.setattr("app.services.amap.amap_service.search_restaurants", mock_empty_restaurants)
+        resp = await client.post("/api/v1/restaurant/recommend", headers=auth_headers, json={
+            "city": "北京",
+            "cuisine": "湘菜",
+        })
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["restaurants"]
+        assert "湘菜" in data["restaurants"][0]["category"]
+
     async def test_recommend_unauthorized(self, client):
         resp = await client.post("/api/v1/restaurant/recommend", json={
             "city": "成都",

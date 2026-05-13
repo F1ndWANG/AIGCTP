@@ -415,6 +415,25 @@ npm run build
 npm run test:e2e
 ```
 
+Local smoke check without Docker/k6:
+
+```bash
+python scripts/smoke_test.py --base-url http://127.0.0.1:8000
+```
+
+PostgreSQL-specific integration tests require a real PostgreSQL URL:
+
+```bash
+cd backend
+DATABASE_URL=postgresql+asyncpg://lifeai:lifeai_dev@localhost:5432/life_recommender_test pytest tests/test_integration -q
+```
+
+On Windows, initialize the default local PostgreSQL test role/database first:
+
+```powershell
+.\scripts\setup-local-postgres.ps1
+```
+
 ## Deployment Notes
 
 - `docker-compose.yml` is suitable for local infrastructure and backend development.

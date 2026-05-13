@@ -195,6 +195,39 @@ def has_real_amap_key(api_key: Optional[str]) -> bool:
 
 def demo_restaurants(city: str, cuisine: Optional[str] = None, limit: int = 10) -> list[dict]:
     base = list(_CITY_RESTAURANTS.get(city, []))
+    if cuisine:
+        filtered = [
+            item for item in base
+            if cuisine in item.get("category", "") or cuisine in item.get("tags", [])
+        ]
+        if filtered:
+            return filtered[:limit]
+        return [
+            {
+                "name": f"{city}{cuisine}风味馆",
+                "address": f"{city}核心商圈",
+                "rating": "4.5",
+                "category": cuisine,
+                "tags": [cuisine, "人气餐厅", "适合聚餐"],
+                "longitude": None,
+                "latitude": None,
+                "phone": "",
+                "reason": f"按「{cuisine}」口味生成的本地兜底推荐，适合地图 API 暂无结果时继续完成推荐流程。",
+                "recommended_dishes": [f"{cuisine}招牌菜", "当季特色菜", "店内小吃"],
+            },
+            {
+                "name": f"{city}家常{cuisine}小馆",
+                "address": f"{city}热门餐饮街区",
+                "rating": "4.4",
+                "category": cuisine,
+                "tags": [cuisine, "家常口味", "性价比"],
+                "longitude": None,
+                "latitude": None,
+                "phone": "",
+                "reason": f"更偏日常口味和性价比，适合想吃{cuisine}但不想排队太久的场景。",
+                "recommended_dishes": [f"家常{cuisine}", "下饭热菜", "特色主食"],
+            },
+        ][:limit]
     if not base:
         base = [
             {
@@ -210,13 +243,6 @@ def demo_restaurants(city: str, cuisine: Optional[str] = None, limit: int = 10) 
                 "recommended_dishes": ["当地招牌菜", "时令小吃"],
             }
         ]
-    if cuisine:
-        filtered = [
-            item for item in base
-            if cuisine in item.get("category", "") or cuisine in item.get("tags", [])
-        ]
-        if filtered:
-            base = filtered
     return base[:limit]
 
 

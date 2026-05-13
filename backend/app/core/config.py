@@ -36,6 +36,20 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "deepseek-v4-flash"
     LLM_FALLBACK_MODEL: Optional[str] = None
 
+    # Product image generation (OpenAI-compatible image API)
+    IMAGE_API_KEY: Optional[str] = None
+    IMAGE_API_BASE: str = "https://api.openai.com/v1"
+    IMAGE_MODEL: str = "gpt-image-2"
+    PRODUCT_IMAGE_OUTPUT_DIR: str = "../frontend/public/generated-products"
+    PRODUCT_IMAGE_PUBLIC_PATH: str = "/generated-products"
+
+    # Recommendation embeddings (optional; local similarity fallback is always available)
+    EMBEDDING_API_KEY: Optional[str] = None
+    EMBEDDING_API_BASE: str = "https://api.openai.com/v1"
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    RECOMMENDATION_DECAY_HALF_LIFE_DAYS: int = 14
+    RECOMMENDATION_DEFAULT_LIMIT: int = 12
+
     # Amap (高德地图)
     AMAP_API_KEY: Optional[str] = None
 

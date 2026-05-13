@@ -39,12 +39,40 @@ from app.services.runtime import (
     mark_task_failed,
     mark_task_succeeded,
 )
+from app.services.recommendation import recommendation_service
 from app.services.truncation import truncate_messages
 from datetime import datetime, timezone
 
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+async def _track_recommendation_safe(
+    db: AsyncSession,
+    *,
+    user_id: int,
+    domain: str,
+    item_type: str,
+    item_id: str | int,
+    event_type: str,
+    context: dict[str, Any] | None = None,
+    session_id: str | None = None,
+) -> None:
+    try:
+        await recommendation_service.track(
+            db,
+            user_id=user_id,
+            domain=domain,
+            item_type=item_type,
+            item_id=item_id,
+            event_type=event_type,
+            context=context or {},
+            session_id=session_id,
+            commit=False,
+        )
+    except Exception as exc:
+        logger.debug("Recommendation event skipped: %s", exc)
 
 
 async def _learn_from_message(
@@ -106,6 +134,16 @@ async def handle_chat(
         )
         context = await load_travel_plan_context(payload.travel_plan_id, current_user.id, context, db)
         _update_travel_memory_from_message(context, payload.message)
+        await _track_recommendation_safe(
+            db,
+            user_id=current_user.id,
+            domain="home",
+            item_type="chat_message",
+            item_id=session_id,
+            event_type="chat_mention",
+            context={"message": payload.message, "travel_plan_id": payload.travel_plan_id},
+            session_id=session_id,
+        )
 
         messages.append({"role": "user", "content": payload.message, "session_id": session_id})
         messages = await truncate_messages(messages)
@@ -411,6 +449,16 @@ async def _emit_result_events(
         payload=_task_result_payload(result),
     )
     if travel_plan:
+        await _track_recommendation_safe(
+            db,
+            user_id=user_id,
+            domain="travel",
+            item_type="travel_plan",
+            item_id=travel_plan.id,
+            event_type="chat_mention",
+            context=travel_plan.model_dump(mode="json"),
+            session_id=session_id,
+        )
         await emit_domain_event(
             db=db,
             user_id=user_id,
@@ -422,6 +470,16 @@ async def _emit_result_events(
             payload=travel_plan.model_dump(mode="json"),
         )
     if restaurant_record:
+        await _track_recommendation_safe(
+            db,
+            user_id=user_id,
+            domain="restaurant",
+            item_type="restaurant_recommendation",
+            item_id=restaurant_record.id,
+            event_type="chat_mention",
+            context=restaurant_record.model_dump(mode="json"),
+            session_id=session_id,
+        )
         await emit_domain_event(
             db=db,
             user_id=user_id,
@@ -433,6 +491,19 @@ async def _emit_result_events(
             payload=restaurant_record.model_dump(mode="json"),
         )
     if result.products:
+        for product in result.products[:8]:
+            product_id = product.get("id") or product.get("product_id") or product.get("name")
+            if product_id:
+                await _track_recommendation_safe(
+                    db,
+                    user_id=user_id,
+                    domain="commerce",
+                    item_type="product",
+                    item_id=product_id,
+                    event_type="chat_mention",
+                    context=product,
+                    session_id=session_id,
+                )
         await emit_domain_event(
             db=db,
             user_id=user_id,
@@ -455,6 +526,16 @@ async def _emit_result_events(
             payload={"cart_items": result.cart_items},
         )
     if result.diet_plan:
+        await _track_recommendation_safe(
+            db,
+            user_id=user_id,
+            domain="diet",
+            item_type="diet_plan",
+            item_id=session_id,
+            event_type="chat_mention",
+            context={"diet_plan": result.diet_plan},
+            session_id=session_id,
+        )
         await emit_domain_event(
             db=db,
             user_id=user_id,

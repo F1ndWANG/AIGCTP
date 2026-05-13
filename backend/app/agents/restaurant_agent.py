@@ -13,6 +13,9 @@ from app.services.amap import amap_service
 from app.agents.tools.poi_tools import search_restaurants as poi_search_restaurants
 from app.agents.domain_results import RestaurantAgentResult
 from app.core.logging import get_logger
+from app.models.user import User
+from app.services.recommendation import recommendation_service
+from app.services.recommendation.candidate import restaurant_candidate
 
 logger = get_logger(__name__)
 
@@ -38,6 +41,7 @@ async def recommend_restaurants(
     dietary_restrictions: list[str] | None = None,
     cuisine: str | None = None,
     db: AsyncSession | None = None,
+    user_id: int | None = None,
 ) -> RestaurantAgentResult:
     """Recommend restaurants in a city based on preferences.
 
@@ -60,6 +64,37 @@ async def recommend_restaurants(
             restaurants=[],
             city=city,
         )
+
+    if db is not None and user_id is not None:
+        try:
+            user = await db.get(User, user_id)
+            if user:
+                candidates = []
+                for index, restaurant in enumerate(restaurants):
+                    candidate = restaurant_candidate(index, {**restaurant, "city": restaurant.get("city") or city, "cuisine": restaurant.get("cuisine") or cuisine})
+                    candidates.append(candidate)
+                ranked = await recommendation_service.rank_candidates(
+                    db,
+                    user=user,
+                    domain="restaurant",
+                    candidates=candidates,
+                    limit=min(len(restaurants), 12),
+                    context={
+                        "city": city,
+                        "cuisine": cuisine,
+                        "dietary_restrictions": dietary_restrictions or [],
+                        "query": user_message,
+                    },
+                    log=False,
+                )
+                raw_by_id = {candidate["item_id"]: candidate["metadata"]["raw"] for candidate in candidates}
+                restaurants = [
+                    {**raw_by_id.get(item["item_id"], {}), "recommendation_reason": item.get("reason")}
+                    for item in ranked
+                    if item["item_id"] in raw_by_id
+                ] or restaurants
+        except Exception as e:
+            logger.warning("Restaurant personalized ranking failed: %s", e)
 
     # Step 2: Filter and rank via LLM
     rest_str = json.dumps(restaurants, ensure_ascii=False, indent=2)

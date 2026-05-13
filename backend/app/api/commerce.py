@@ -11,10 +11,12 @@ from app.core.database import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
 from app.models.commerce import Category, Product, Cart, CartItem, Order
+from app.services.product_images import generate_product_image, has_generated_product_image
+from app.services.recommendation import recommendation_service
 from app.schemas.commerce import (
     CategoryResponse, CategoryCreateRequest,
     ProductRequest, ProductResponse, ProductListItem,
-    CartResponse, CartItemResponse, AddCartItemRequest, UpdateCartItemRequest,
+    CartResponse, CartItemResponse, AddCartItemRequest, AddRecommendedCartItemRequest, UpdateCartItemRequest,
     OrderResponse, OrderListItem, OrderItemResponse, CreateOrderRequest,
 )
 
@@ -23,6 +25,10 @@ from pydantic import BaseModel
 
 class OrderStatusUpdate(BaseModel):
     status: str
+
+
+class ProductImageGenerateRequest(BaseModel):
+    product_ids: list[int]
 
 
 VALID_ORDER_TRANSITIONS = {
@@ -135,6 +141,63 @@ async def create_product(
     return ProductResponse.model_validate(product)
 
 
+@router.post("/products/{product_id}/image", summary="Generate product image")
+async def generate_single_product_image(
+    product_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    product = await db.get(Product, product_id)
+    if not product or product.status != "active":
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    if has_generated_product_image(product):
+        return {"product_id": product.id, "image_url": product.image_urls[0], "generated": False}
+
+    try:
+        image_url = await generate_product_image(product)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    existing = [url for url in (product.image_urls or []) if url != image_url]
+    product.image_urls = [image_url, *existing]
+    flag_modified(product, "image_urls")
+    await db.commit()
+    return {"product_id": product.id, "image_url": image_url, "generated": True}
+
+
+@router.post("/products/images/generate", summary="Generate missing product images")
+async def generate_missing_product_images(
+    payload: ProductImageGenerateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not payload.product_ids:
+        return {"items": []}
+
+    result = await db.execute(
+        select(Product).where(Product.id.in_(set(payload.product_ids)), Product.status == "active")
+    )
+    products = list(result.scalars().all())
+    items = []
+    for product in products:
+        if has_generated_product_image(product):
+            items.append({"product_id": product.id, "image_url": product.image_urls[0], "generated": False})
+            continue
+        try:
+            image_url = await generate_product_image(product)
+        except RuntimeError as exc:
+            items.append({"product_id": product.id, "error": str(exc), "generated": False})
+            continue
+        existing = [url for url in (product.image_urls or []) if url != image_url]
+        product.image_urls = [image_url, *existing]
+        flag_modified(product, "image_urls")
+        items.append({"product_id": product.id, "image_url": image_url, "generated": True})
+
+    await db.commit()
+    return {"items": items}
+
+
 # ==================== Cart ====================
 
 
@@ -180,6 +243,100 @@ def _build_cart_response(cart: Cart) -> CartResponse:
     )
 
 
+async def _add_product_to_cart(
+    product: Product,
+    quantity: int,
+    specs: dict,
+    user_id: int,
+    db: AsyncSession,
+) -> CartItemResponse:
+    if product.status != "active":
+        raise HTTPException(status_code=404, detail="Product not found or not available")
+    if product.stock < 1:
+        raise HTTPException(status_code=400, detail="Product out of stock")
+
+    cart = await _get_or_create_cart(user_id, db)
+    spec_json = json.dumps(specs, sort_keys=True, ensure_ascii=False)
+    existing_item = None
+    for item in cart.items:
+        if item.product_id == product.id and json.dumps(item.specs or {}, sort_keys=True, ensure_ascii=False) == spec_json:
+            existing_item = item
+            break
+
+    if existing_item:
+        existing_item.quantity += quantity
+        await db.commit()
+        await db.refresh(existing_item)
+        item = existing_item
+    else:
+        item = CartItem(
+            cart_id=cart.id,
+            product_id=product.id,
+            quantity=quantity,
+            specs=specs,
+        )
+        db.add(item)
+        await db.commit()
+        await db.refresh(item)
+
+    await db.refresh(product)
+    return CartItemResponse(
+        id=item.id,
+        product_id=item.product_id,
+        product_name=product.name,
+        product_image=product.image_urls[0] if product.image_urls else "",
+        price=float(product.price),
+        unit=product.unit,
+        quantity=item.quantity,
+        specs=item.specs or {},
+        created_at=item.created_at,
+    )
+
+
+async def _get_or_create_ai_category(db: AsyncSession) -> Category:
+    result = await db.execute(select(Category).where(Category.name == "AI 推荐"))
+    category = result.scalar_one_or_none()
+    if category:
+        return category
+    category = Category(name="AI 推荐", description="由 AI 对话生成的个性化商品", icon="✨", sort_order=99)
+    db.add(category)
+    await db.flush()
+    return category
+
+
+async def _resolve_recommended_product(payload: AddRecommendedCartItemRequest, db: AsyncSession) -> Product:
+    if payload.product_id:
+        product = await db.get(Product, payload.product_id)
+        if product and product.status == "active" and product.stock > 0:
+            return product
+
+    name = (payload.product_name or "").strip() or "行程推荐好物"
+    result = await db.execute(select(Product).where(Product.name == name, Product.status == "active"))
+    product = result.scalar_one_or_none()
+    if product:
+        return product
+
+    category = await _get_or_create_ai_category(db)
+    price = payload.price if payload.price and payload.price > 0 else 79.0
+    product = Product(
+        name=name,
+        description=payload.reason or "来自行程推荐的好物",
+        price=price,
+        category_id=category.id,
+        image_urls=[],
+        stock=99,
+        unit="件",
+        specs=[],
+        tags=["AI推荐", "行程推荐"],
+        rating=4.5,
+        status="active",
+        source="ai_generated",
+    )
+    db.add(product)
+    await db.flush()
+    return product
+
+
 @router.get("/cart", summary="Get cart", response_model=CartResponse)
 async def get_cart(
     current_user: User = Depends(get_current_user),
@@ -198,46 +355,37 @@ async def add_cart_item(
     product = await db.get(Product, payload.product_id)
     if not product or product.status != "active":
         raise HTTPException(status_code=404, detail="Product not found or not available")
-    if product.stock < 1:
-        raise HTTPException(status_code=400, detail="Product out of stock")
-
-    cart = await _get_or_create_cart(current_user.id, db)
-
-    spec_json = json.dumps(payload.specs, sort_keys=True, ensure_ascii=False)
-    existing_item = None
-    for item in cart.items:
-        if item.product_id == payload.product_id and json.dumps(item.specs or {}, sort_keys=True, ensure_ascii=False) == spec_json:
-            existing_item = item
-            break
-
-    if existing_item:
-        existing_item.quantity += payload.quantity
-        await db.commit()
-        await db.refresh(existing_item)
-        item = existing_item
-    else:
-        item = CartItem(
-            cart_id=cart.id,
-            product_id=payload.product_id,
-            quantity=payload.quantity,
-            specs=payload.specs,
-        )
-        db.add(item)
-        await db.commit()
-        await db.refresh(item)
-
-    await db.refresh(product)
-    return CartItemResponse(
-        id=item.id,
-        product_id=item.product_id,
-        product_name=product.name,
-        product_image=product.image_urls[0] if product.image_urls else "",
-        price=float(product.price),
-        unit=product.unit,
-        quantity=item.quantity,
-        specs=item.specs or {},
-        created_at=item.created_at,
+    item = await _add_product_to_cart(product, payload.quantity, payload.specs, current_user.id, db)
+    await recommendation_service.track(
+        db,
+        user_id=current_user.id,
+        domain="commerce",
+        item_type="product",
+        item_id=product.id,
+        event_type="add_cart",
+        context={"quantity": payload.quantity, "specs": payload.specs, "product_name": product.name},
     )
+    return item
+
+
+@router.post("/cart/recommended-item", summary="Add recommended item to cart", response_model=CartItemResponse, status_code=201)
+async def add_recommended_cart_item(
+    payload: AddRecommendedCartItemRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    product = await _resolve_recommended_product(payload, db)
+    item = await _add_product_to_cart(product, payload.quantity, payload.specs, current_user.id, db)
+    await recommendation_service.track(
+        db,
+        user_id=current_user.id,
+        domain="commerce",
+        item_type="product",
+        item_id=product.id,
+        event_type="add_cart",
+        context={"quantity": payload.quantity, "source": "recommended_item", "product_name": product.name},
+    )
+    return item
 
 
 @router.put("/cart/items/{item_id}", summary="Update cart item", response_model=CartItemResponse)
@@ -368,6 +516,18 @@ async def create_order(
 
     await db.commit()
     await db.refresh(order)
+    for order_item in order_items:
+        await recommendation_service.track(
+            db,
+            user_id=current_user.id,
+            domain="commerce",
+            item_type="product",
+            item_id=order_item.get("product_id"),
+            event_type="order",
+            context={"order_id": order.id, "item": order_item},
+            commit=False,
+        )
+    await db.commit()
     return _build_order_response(order)
 
 

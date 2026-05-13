@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import html2canvas from "html2canvas";
 import type { TravelPlanItinerary, TravelPlanItineraryDay } from "@/lib/types";
 import RoutePanel from "./RoutePanel";
@@ -23,6 +24,7 @@ interface TravelPlanCardProps {
 export default function TravelPlanCard({ plan, onView, onConfirm, confirming }: TravelPlanCardProps) {
   const itinerary = normalizeItinerary(plan.itinerary, plan.destination, plan.days);
   const { toast } = useToast();
+  const router = useRouter();
   const [selectedPoi, setSelectedPoi] = useState<string | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const isDraft = plan.status === "draft";
@@ -53,6 +55,10 @@ export default function TravelPlanCard({ plan, onView, onConfirm, confirming }: 
       navigator.clipboard.writeText(text).then(() => toast("行程摘要已复制", "success")).catch(() => {});
     }
   }, [plan, itinerary, toast]);
+
+  const publishNote = useCallback(() => {
+    router.push(`/shares?planId=${plan.id}`);
+  }, [plan.id, router]);
 
   if (!itinerary || !itinerary.day_by_day) {
     return (
@@ -159,6 +165,13 @@ export default function TravelPlanCard({ plan, onView, onConfirm, confirming }: 
             title="分享行程"
           >
             📤 分享
+          </button>
+          <button
+            onClick={publishNote}
+            className="py-2.5 px-3 text-sm text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition flex items-center justify-center gap-1"
+            title="发布为旅行笔记"
+          >
+            发布笔记
           </button>
         </div>
       )}
@@ -268,9 +281,17 @@ function DayCard({
 }) {
   const { toast } = useToast();
 
-  const handleAddToCart = async (productId: number) => {
+  type ShoppingItem = NonNullable<TravelPlanItineraryDay["shopping"]>[number];
+
+  const handleAddToCart = async (item: ShoppingItem) => {
     try {
-      await api.addCartItem({ product_id: productId, quantity: 1 });
+      await api.addRecommendedCartItem({
+        product_id: item.product_id,
+        product_name: item.product_name || "行程推荐好物",
+        price: Number(item.price) || undefined,
+        reason: item.reason || "",
+        quantity: 1,
+      });
       toast("已加入购物车", "success");
     } catch {
       toast("加入购物车失败", "error");
@@ -378,7 +399,7 @@ function DayCard({
                   <p className="text-xs font-bold text-red-600 mt-0.5">¥{item.price}</p>
                 </div>
                 <button
-                  onClick={() => handleAddToCart(item.product_id)}
+                  onClick={() => handleAddToCart(item)}
                   className="shrink-0 text-xs px-2.5 py-1 bg-orange-500 text-white rounded-md hover:bg-orange-600 transition"
                 >
                   加购

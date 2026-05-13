@@ -7,6 +7,7 @@ from app.api.deps import get_current_user
 from app.models.user import User
 from app.models.travel import TravelPlan
 from app.schemas.travel import TravelPlanResponse, TravelPlanListItem
+from app.services.recommendation import recommendation_service
 
 router = APIRouter(prefix="/travel", tags=["travel"])
 
@@ -55,6 +56,20 @@ async def confirm_plan(
         raise HTTPException(status_code=404, detail="Travel plan not found")
 
     plan.status = "confirmed"
+    await recommendation_service.track(
+        db,
+        user_id=current_user.id,
+        domain="travel",
+        item_type="travel_plan",
+        item_id=plan.id,
+        event_type="confirm_plan",
+        context={
+            "destination": plan.destination,
+            "days": plan.days,
+            "preferences": plan.preferences or {},
+        },
+        commit=False,
+    )
     await db.commit()
     await db.refresh(plan)
     return TravelPlanResponse.model_validate(plan)

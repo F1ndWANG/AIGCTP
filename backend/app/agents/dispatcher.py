@@ -257,6 +257,7 @@ class AgentDispatcher:
             cuisine=cuisine,
             dietary_restrictions=dietary_restrictions,
             db=db,
+            user_id=user_id,
         ))
 
     async def _dispatch_general_chat(self, messages: list[dict]) -> dict[str, Any]:

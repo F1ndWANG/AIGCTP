@@ -111,6 +111,15 @@ class AddCartItemRequest(BaseModel):
     specs: dict[str, Any] = {}
 
 
+class AddRecommendedCartItemRequest(BaseModel):
+    product_id: Optional[int] = None
+    product_name: str
+    price: float = 0.0
+    reason: str = ""
+    quantity: int = 1
+    specs: dict[str, Any] = {}
+
+
 class UpdateCartItemRequest(BaseModel):
     quantity: int
 

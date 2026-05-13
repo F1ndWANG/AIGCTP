@@ -11,12 +11,14 @@ from sqlalchemy import select
 
 from app.services.llm import llm_service
 from app.models.commerce import Category, Product, Cart, CartItem, Order
+from app.models.user import User
 from app.core.logging import get_logger
 from app.agents.domain_results import (
     CartAgentResult,
     CommerceRecommendationResult,
     ReorderAgentResult,
 )
+from app.services.recommendation import recommendation_service
 
 logger = get_logger(__name__)
 
@@ -157,7 +159,34 @@ async def commerce_recommend(
     category_name = intent.get("category", "")
     max_price = intent.get("max_price", 0)
 
-    # Step 2: Query products from DB
+    # Step 2: Try personalized recommendation candidates first.
+    products: list[Product] = []
+    try:
+        user = await db.get(User, user_id)
+        if user:
+            feed = await recommendation_service.recommend(
+                db,
+                user=user,
+                domain="commerce",
+                limit=12,
+                context={
+                    "query": user_message,
+                    "keywords": keywords,
+                    "category": category_name,
+                    "max_price": max_price,
+                    "session_id": session_id,
+                },
+                log=False,
+            )
+            product_ids = [int(item["item_id"]) for item in feed if item.get("item_type") == "product" and str(item.get("item_id", "")).isdigit()]
+            if product_ids:
+                result = await db.execute(select(Product).where(Product.id.in_(product_ids), Product.status == "active"))
+                product_map = {product.id: product for product in result.scalars().all()}
+                products = [product_map[pid] for pid in product_ids if pid in product_map]
+    except Exception as e:
+        logger.warning("Commerce recommendation service failed: %s", e)
+
+    # Step 3: Query products from DB if personalized candidates are insufficient.
     query = select(Product).where(Product.status == "active")
 
     if keywords:
@@ -178,11 +207,14 @@ async def commerce_recommend(
         if cat:
             query = query.where(Product.category_id == cat.id)
 
-    query = query.order_by(Product.rating.desc()).limit(20)
-    result = await db.execute(query)
-    products = list(result.scalars().all())
+    if len(products) < 3:
+        query = query.order_by(Product.rating.desc()).limit(20)
+        result = await db.execute(query)
+        fallback_products = list(result.scalars().all())
+        seen = {p.id for p in products}
+        products.extend([p for p in fallback_products if p.id not in seen])
 
-    # Step 3: Use LLM to rank and recommend
+    # Step 4: Use LLM to rank and recommend
     if not products:
         # Broader search: just use first keyword
         if keywords:

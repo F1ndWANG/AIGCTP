@@ -7,6 +7,7 @@ import { restaurant as restaurantApi } from "@/lib/api";
 import RestaurantList from "@/components/Restaurant/RestaurantList";
 import { useToast } from "@/components/UI/Toast";
 import { chatHref, getActiveSessionId, setActiveSessionId } from "@/lib/session";
+import { useRecommendationTracking } from "@/lib/useRecommendationTracking";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/UI/card";
 import { Badge } from "@/components/UI/badge";
 import { Button } from "@/components/UI/button";
@@ -23,6 +24,7 @@ function RestaurantsPageContent() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const { track } = useRecommendationTracking("restaurants_page", sessionId);
   const [city, setCity] = useState("");
   const [cuisine, setCuisine] = useState("");
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
@@ -80,6 +82,15 @@ function RestaurantsPageContent() {
     try {
       const data = await restaurantApi.recommend(targetCity, cuisine || undefined, sessionId || undefined);
       setRestaurants(data.restaurants || []);
+      (data.restaurants || []).slice(0, 8).forEach((item) => {
+        track({
+          domain: "restaurant",
+          item_type: "restaurant",
+          item_id: item.name,
+          event_type: "view",
+          context: { city: targetCity, cuisine, restaurant: item },
+        });
+      });
       setResponse(data.response || "");
       setRecommendationId(data.recommendation_id || null);
       setSelectedRestaurant(null);
@@ -100,6 +111,13 @@ function RestaurantsPageContent() {
     }
     try {
       const saved = await restaurantApi.selectRecommendation(recommendationId, restaurant as unknown as Record<string, unknown>);
+      track({
+        domain: "restaurant",
+        item_type: "restaurant",
+        item_id: restaurant.name,
+        event_type: "select",
+        context: { recommendation_id: recommendationId, restaurant },
+      });
       setSelectedRestaurant(saved.selected_restaurant || restaurant);
       setSavedRecommendations((prev) => prev.map((item) => item.id === saved.id ? saved : item));
       toast("已同步到餐厅页", "success");

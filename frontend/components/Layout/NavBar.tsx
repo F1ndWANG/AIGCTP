@@ -15,6 +15,7 @@ import {
   Menu,
   User,
   LogOut,
+  BookOpenText,
 } from "lucide-react";
 
 import { useAuth } from "@/components/Layout/AuthProvider";
@@ -29,6 +30,7 @@ const navLinks = [
   { href: "/plans", label: "行程", icon: Map },
   { href: "/products", label: "商品", icon: ShoppingBag },
   { href: "/restaurants", label: "餐厅", icon: UtensilsCrossed },
+  { href: "/shares", label: "游记", icon: BookOpenText },
   { href: "/diet", label: "饮食健康", icon: Apple },
   { href: "/cart", label: "购物车", icon: ShoppingCart },
 ];

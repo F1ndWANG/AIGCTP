@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text as sa_text
 
-from app.api import auth, users, travel, chat, route, diet, commerce, feedback, restaurant, runtime
+from app.api import auth, users, travel, chat, route, diet, commerce, feedback, restaurant, runtime, recommendation, share
 from app.core.config import settings
 from app.core.database import async_session, init_db
 from app.core.logging import setup_logging, get_logger
@@ -97,6 +97,8 @@ app.include_router(commerce.router, prefix="/api/v1")
 app.include_router(feedback.router, prefix="/api/v1")
 app.include_router(restaurant.router, prefix="/api/v1")
 app.include_router(runtime.router, prefix="/api/v1")
+app.include_router(recommendation.router, prefix="/api/v1")
+app.include_router(share.router, prefix="/api/v1")
 
 
 @app.get("/api/v1/metrics")

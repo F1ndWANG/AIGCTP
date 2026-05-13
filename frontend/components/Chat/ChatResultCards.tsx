@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ShoppingBag, Utensils, Apple, ShoppingCart, ArrowRight, Map as MapIcon } from "lucide-react";
+import { ShoppingBag, Utensils, Apple, ShoppingCart, ArrowRight, ChevronDown, ChevronUp, Map as MapIcon } from "lucide-react";
 import TravelPlanCard from "@/components/TravelPlan/TravelPlanCard";
 import { Card } from "@/components/UI/card";
 import { MagicCard } from "@/components/UI/magic-card";
@@ -32,6 +33,13 @@ export default function ChatResultCards({
   onAddToCart,
 }: ChatResultCardsProps) {
   const router = useRouter();
+  const [planOpen, setPlanOpen] = useState(false);
+
+  useEffect(() => {
+    if (currentPlan?.status === "draft") {
+      setPlanOpen(true);
+    }
+  }, [currentPlan?.id, currentPlan?.status]);
 
   const hasAny =
     (currentPlan && currentPlan.itinerary) ||
@@ -48,23 +56,59 @@ export default function ChatResultCards({
         <MagicCard mode="gradient" gradientFrom="#d946ef" gradientTo="#14b8a6" gradientSize={360} className="rounded-xl">
           <Card size="sm" className="border-0 shadow-none bg-transparent">
             <div className="p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <MapIcon className="h-4 w-4 text-primary" />
-                  <h3 className="text-sm font-semibold text-card-foreground">已同步到行程</h3>
-                </div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <button
-                  onClick={() => router.push(withSession(`/travel/${currentPlan.id}`, sessionId))}
-                  className="flex items-center gap-1 text-xs text-primary hover:text-primary/80"
+                  type="button"
+                  onClick={() => setPlanOpen((open) => !open)}
+                  className="min-w-0 flex-1 text-left group/plan"
+                  aria-expanded={planOpen}
                 >
-                  查看行程 <ArrowRight className="h-3 w-3" />
+                  <div className="flex items-center gap-2">
+                    <MapIcon className="h-4 w-4 shrink-0 text-primary" />
+                    <h3 className="text-sm font-semibold text-card-foreground">已同步到行程</h3>
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
+                      {currentPlan.status === "confirmed" ? "已确认" : currentPlan.status === "draft" ? "草稿" : currentPlan.status}
+                    </span>
+                  </div>
+                  <p className="mt-1 truncate text-xs text-muted-foreground group-hover/plan:text-foreground">
+                    {currentPlan.destination} · {currentPlan.days} 天 · {currentPlan.itinerary.theme || "行程方案"}
+                  </p>
                 </button>
+
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPlanOpen((open) => !open)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-border bg-background/70 px-3 py-1.5 text-xs text-foreground transition hover:bg-muted"
+                  >
+                    {planOpen ? (
+                      <>
+                        收起 <ChevronUp className="h-3.5 w-3.5" />
+                      </>
+                    ) : (
+                      <>
+                        展开 <ChevronDown className="h-3.5 w-3.5" />
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => router.push(withSession(`/travel/${currentPlan.id}`, sessionId))}
+                    className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-primary hover:bg-primary/10 hover:text-primary"
+                  >
+                    查看行程 <ArrowRight className="h-3 w-3" />
+                  </button>
+                </div>
               </div>
-              <TravelPlanCard
-                plan={currentPlan}
-                onConfirm={onConfirmPlan}
-                confirming={confirmingPlan}
-              />
+              {planOpen && (
+                <div className="mt-3">
+                  <TravelPlanCard
+                    plan={currentPlan}
+                    onConfirm={onConfirmPlan}
+                    confirming={confirmingPlan}
+                  />
+                </div>
+              )}
             </div>
           </Card>
         </MagicCard>

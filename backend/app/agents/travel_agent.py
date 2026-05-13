@@ -22,7 +22,10 @@ from app.agents.prompt_builder import (
     build_unified_adjustment_prompt,
 )
 from app.models.commerce import Product
+from app.models.user import User
 from app.core.logging import get_logger
+from app.services.recommendation import recommendation_service
+from app.services.recommendation.candidate import restaurant_candidate
 
 logger = get_logger(__name__)
 
@@ -45,11 +48,93 @@ async def _safe_fetch(coro, name: str, timeout: float = 15.0, default=None):
         return default or []
 
 
+def _travel_item_candidate(item: dict, *, destination: str, item_type: str, index: int) -> dict:
+    name = item.get("name") or item.get("title") or item.get("poi") or f"{destination}推荐"
+    rating = item.get("rating") or item.get("score") or 0
+    return {
+        "domain": "travel",
+        "item_type": item_type,
+        "item_id": str(item.get("id") or item.get("poi_id") or f"{item_type}:{index}:{name}"),
+        "title": name,
+        "subtitle": item.get("address") or destination,
+        "description": item.get("description") or item.get("reason") or item.get("intro") or item.get("address"),
+        "image_url": None,
+        "url": None,
+        "metadata": {
+            "city": destination,
+            "rating": float(rating or 0),
+            "tags": item.get("tags") or item.get("type") or item.get("category"),
+            "raw": item,
+        },
+    }
+
+
+def _product_item_candidate(item: dict, *, index: int) -> dict:
+    return {
+        "domain": "commerce",
+        "item_type": "product",
+        "item_id": str(item.get("id") or f"product:{index}:{item.get('name', '')}"),
+        "title": item.get("name") or "推荐好物",
+        "subtitle": f"¥{float(item.get('price') or 0):.1f}",
+        "description": item.get("description") or "适合本次行程的推荐好物",
+        "image_url": None,
+        "url": f"/products/{item.get('id')}" if item.get("id") else None,
+        "metadata": {
+            "price": item.get("price"),
+            "rating": float(item.get("rating") or 0),
+            "tags": item.get("tags") or [],
+            "raw": item,
+        },
+    }
+
+
+async def _rank_external_items(
+    db: AsyncSession,
+    *,
+    user_id: int | None,
+    destination: str,
+    items: list[dict],
+    domain: str,
+    item_type: str,
+    limit: int,
+    context: dict,
+) -> list[dict]:
+    if not user_id or not items:
+        return items[:limit]
+    try:
+        user = await db.get(User, user_id)
+        if not user:
+            return items[:limit]
+        candidates = []
+        for index, item in enumerate(items):
+            if domain == "restaurant":
+                candidates.append(restaurant_candidate(index, {**item, "city": item.get("city") or destination}))
+            elif domain == "commerce":
+                candidates.append(_product_item_candidate(item, index=index))
+            else:
+                candidates.append(_travel_item_candidate(item, destination=destination, item_type=item_type, index=index))
+        ranked = await recommendation_service.rank_candidates(
+            db,
+            user=user,
+            domain=domain,
+            candidates=candidates,
+            limit=limit,
+            context=context,
+            log=False,
+        )
+        raw_by_id = {candidate["item_id"]: candidate["metadata"]["raw"] for candidate in candidates}
+        return [raw_by_id[item["item_id"]] for item in ranked if item["item_id"] in raw_by_id] or items[:limit]
+    except Exception as e:
+        logger.warning("Travel external recommendation ranking failed: %s", e)
+        return items[:limit]
+
+
 async def _fetch_domain_data(
     db: AsyncSession,
     destination: str,
     days: int,
     *,
+    user_id: int | None = None,
     poi_limit: int = 12,
     restaurant_limit: int = 6,
     include_hotels: bool = True,
@@ -62,7 +147,17 @@ async def _fetch_domain_data(
             result = await db.execute(
                 select(Product).where(Product.status == "active").order_by(Product.rating.desc()).limit(10)
             )
-            return [{"id": p.id, "name": p.name, "price": p.price, "tags": p.tags or []} for p in result.scalars().all()]
+            return [
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "price": float(p.price),
+                    "rating": float(p.rating or 0),
+                    "description": p.description,
+                    "tags": p.tags or [],
+                }
+                for p in result.scalars().all()
+            ]
         except Exception as e:
             logger.warning("fetch_products failed: %s", e)
             return []
@@ -76,7 +171,21 @@ async def _fetch_domain_data(
         _safe_fetch(get_weather_forecast(destination, days=days), "weather"),
         _safe_fetch(_fetch_products(), "products"),
     )
-    return results[0], results[1], results[2] if include_hotels else [], results[3], results[4]
+    pois, restaurants, hotels, weather, products = (
+        results[0],
+        results[1],
+        results[2] if include_hotels else [],
+        results[3],
+        results[4],
+    )
+    context = {"destination": destination, "days": days}
+    pois, restaurants, hotels, products = await _asyncio.gather(
+        _rank_external_items(db, user_id=user_id, destination=destination, items=pois, domain="travel", item_type="poi", limit=poi_limit, context=context),
+        _rank_external_items(db, user_id=user_id, destination=destination, items=restaurants, domain="restaurant", item_type="restaurant", limit=restaurant_limit, context=context),
+        _rank_external_items(db, user_id=user_id, destination=destination, items=hotels, domain="travel", item_type="hotel", limit=3, context=context),
+        _rank_external_items(db, user_id=user_id, destination=destination, items=products, domain="commerce", item_type="product", limit=10, context=context),
+    )
+    return pois, restaurants, hotels, weather, products
 
 
 # ═══════════════════════════════════════════
@@ -558,7 +667,13 @@ async def plan_trip(
 
     await yield_progress(reporter, f"正在搜索{destination}的景点和美食...")
     pois, restaurants, hotels, weather, products = await _fetch_domain_data(
-        db, destination, days, poi_limit=12, restaurant_limit=6, include_hotels=True,
+        db,
+        destination,
+        days,
+        user_id=user_id,
+        poi_limit=12,
+        restaurant_limit=6,
+        include_hotels=True,
     )
     pois = _filter_excluded_pois(pois, avoid_pois or [])
 
@@ -652,7 +767,13 @@ async def adjust_plan(
     await yield_progress(reporter, f"正在搜索{destination}的景点、餐厅和天气...")
 
     pois, restaurants, _, weather, products = await _fetch_domain_data(
-        db, destination, days, poi_limit=20, restaurant_limit=10, include_hotels=False,
+        db,
+        destination,
+        days,
+        user_id=user_id,
+        poi_limit=20,
+        restaurant_limit=10,
+        include_hotels=False,
     )
 
     excluded_pois = merge_travel_memory(

@@ -84,7 +84,7 @@ export interface TravelPlanItineraryDay {
     tips?: string;
   }>;
   shopping?: Array<{
-    product_id: number;
+    product_id?: number;
     product_name: string;
     price: number;
     reason: string;
@@ -376,4 +376,123 @@ export interface RecommendationFeedback {
   feedback: "like" | "dislike";
   content_snapshot?: Record<string, unknown>;
   context?: Record<string, unknown>;
+}
+
+// ===== Recommendation V1 =====
+export type RecommendationDomain = "home" | "commerce" | "restaurant" | "travel" | "diet";
+
+export type RecommendationEventType =
+  | "view"
+  | "click"
+  | "chat_mention"
+  | "save"
+  | "select"
+  | "add_cart"
+  | "confirm_plan"
+  | "order"
+  | "like"
+  | "dislike"
+  | "hide"
+  | "share"
+  | "comment";
+
+export interface RecommendationFeedItem {
+  domain: RecommendationDomain;
+  item_type: string;
+  item_id: string;
+  title: string;
+  subtitle?: string;
+  description?: string;
+  image_url?: string;
+  url?: string;
+  score: number;
+  reason: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface RecommendationFeedResponse {
+  items: RecommendationFeedItem[];
+  total: number;
+  algorithm: string;
+}
+
+export interface RecommendationProfileTerm {
+  term: string;
+  weight: number;
+}
+
+export interface RecommendationProfile {
+  algorithm: string;
+  event_count: number;
+  top_terms: RecommendationProfileTerm[];
+  domain_terms: Record<string, RecommendationProfileTerm[]>;
+  negative_item_count: number;
+  preferences: Record<string, unknown>;
+}
+
+export interface RecommendationEventPayload {
+  domain: RecommendationDomain;
+  item_type: string;
+  item_id: string | number;
+  event_type: RecommendationEventType;
+  weight?: number;
+  context?: Record<string, unknown>;
+  session_id?: string;
+}
+
+export interface RecommendationFeedbackPayload {
+  domain: RecommendationDomain;
+  item_type: string;
+  item_id: string | number;
+  feedback: "like" | "dislike" | "hide" | "save" | "select";
+  context?: Record<string, unknown>;
+  session_id?: string;
+}
+
+// ===== Travel Note Sharing =====
+export interface TravelNoteAuthor {
+  id: number;
+  username: string;
+  display_name: string;
+  avatar_url?: string;
+}
+
+export interface TravelNoteComment {
+  id: number;
+  content: string;
+  author: TravelNoteAuthor;
+  created_at: string;
+}
+
+export interface TravelNote {
+  id: number;
+  title: string;
+  content: string;
+  destination: string;
+  tags: string[];
+  images: string[];
+  visibility: "public" | "private";
+  is_featured: boolean;
+  view_count: number;
+  like_count: number;
+  save_count: number;
+  comment_count: number;
+  share_count: number;
+  created_at: string;
+  updated_at: string;
+  author: TravelNoteAuthor;
+  travel_plan_id?: number;
+  viewer_interactions: Record<string, boolean>;
+  comments: TravelNoteComment[];
+  metadata: Record<string, unknown>;
+}
+
+export interface TravelNoteCreatePayload {
+  title: string;
+  content: string;
+  destination?: string;
+  tags?: string[];
+  images?: string[];
+  travel_plan_id?: number;
+  visibility?: "public" | "private";
 }

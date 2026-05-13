@@ -9,19 +9,24 @@ import {
   MessageCircle,
   ShoppingCart,
   Plus,
-  Sparkles,
   ArrowRight,
   Package,
+  BookOpenText,
 } from "lucide-react";
 
 import { useAuth } from "@/components/Layout/AuthProvider";
-import { travel, diet, chat as chatApi, commerce } from "@/lib/api";
+import { travel, diet, chat as chatApi, commerce, recommendation } from "@/lib/api";
 import { setActiveSessionId } from "@/lib/session";
+import { recommendationItemKey, useRecommendationTracking } from "@/lib/useRecommendationTracking";
 import { Card } from "@/components/UI/card";
 import { Badge } from "@/components/UI/badge";
-import { MagicCard } from "@/components/UI/magic-card";
 import { NumberTicker } from "@/components/UI/number-ticker";
-import type { TravelPlanListItem, DietPlanListItem, ChatSession, Cart } from "@/lib/types";
+import {
+  RecommendationProfilePanel,
+  RecommendationStrip,
+  recommendationFallbackUrl,
+} from "@/components/Home/RecommendationInsights";
+import type { TravelPlanListItem, DietPlanListItem, ChatSession, Cart, RecommendationFeedItem, RecommendationProfile } from "@/lib/types";
 
 export default function PersonalDashboard() {
   const { user } = useAuth();
@@ -30,7 +35,10 @@ export default function PersonalDashboard() {
   const [dietPlans, setDietPlans] = useState<DietPlanListItem[]>([]);
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [cart, setCart] = useState<Cart | null>(null);
+  const [recommendations, setRecommendations] = useState<RecommendationFeedItem[]>([]);
+  const [recProfile, setRecProfile] = useState<RecommendationProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const { feedback: trackRecommendationFeedback, track, trackFeedViews } = useRecommendationTracking("dashboard_feed");
 
   useEffect(() => {
     if (!user) return;
@@ -39,8 +47,13 @@ export default function PersonalDashboard() {
       diet.getPlans().then(setDietPlans).catch(() => {}),
       chatApi.listSessions().then(setChatSessions).catch(() => {}),
       commerce.getCart().then(setCart).catch(() => {}),
+      recommendation.getProfile().then(setRecProfile).catch(() => {}),
+      recommendation.getFeed("home", 10).then((data) => {
+        setRecommendations(data.items);
+        trackFeedViews(data.items);
+      }).catch(() => {}),
     ]).finally(() => setLoading(false));
-  }, [user]);
+  }, [trackFeedViews, user]);
 
   const activeTravel = travelPlans.filter((p) => p.status !== "completed");
   const activeDiet = dietPlans.filter((p) => p.status !== "completed");
@@ -56,6 +69,28 @@ export default function PersonalDashboard() {
   const restoreChat = (sid: string) => {
     setActiveSessionId(sid);
     router.push(`/chat?session=${sid}`);
+  };
+
+  const openRecommendation = (item: RecommendationFeedItem) => {
+    track({
+      domain: item.domain,
+      item_type: item.item_type,
+      item_id: item.item_id,
+      event_type: "click",
+      context: { title: item.title },
+    });
+    router.push(item.url || recommendationFallbackUrl(item.domain));
+  };
+
+  const hideRecommendation = (item: RecommendationFeedItem) => {
+    setRecommendations((prev) => prev.filter((candidate) => recommendationItemKey(candidate) !== recommendationItemKey(item)));
+    trackRecommendationFeedback({
+      domain: item.domain,
+      item_type: item.item_type,
+      item_id: item.item_id,
+      feedback: "hide",
+      context: { title: item.title },
+    });
   };
 
   return (
@@ -113,6 +148,32 @@ export default function PersonalDashboard() {
                 onClick={() => router.push("/cart")}
               />
             </motion.div>
+
+            {recommendations.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.12 }}
+                className="mb-8"
+              >
+                <RecommendationStrip
+                  items={recommendations}
+                  onOpen={openRecommendation}
+                  onHide={hideRecommendation}
+                />
+              </motion.div>
+            )}
+
+            {recProfile && (
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.14 }}
+                className="mb-8"
+              >
+                <RecommendationProfilePanel profile={recProfile} />
+              </motion.div>
+            )}
 
             {/* Content Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -319,7 +380,7 @@ export default function PersonalDashboard() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <ActionButton icon={<MessageCircle className="h-5 w-5 text-fuchsia-500" />} label="新对话" onClick={startNewChat} />
                 <ActionButton icon={<Map className="h-5 w-5 text-violet-500" />} label="规划行程" onClick={startNewChat} />
-                <ActionButton icon={<Apple className="h-5 w-5 text-green-500" />} label="饮食计划" onClick={() => router.push("/diet")} />
+                <ActionButton icon={<BookOpenText className="h-5 w-5 text-sky-500" />} label="分享游记" onClick={() => router.push("/shares")} />
                 <ActionButton icon={<Package className="h-5 w-5 text-amber-500" />} label="浏览商品" onClick={() => router.push("/products")} />
               </div>
             </motion.div>

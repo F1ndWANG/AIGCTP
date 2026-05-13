@@ -19,8 +19,8 @@ setup("register and login test user", async ({ page }) => {
   const registerResp = await page.request.post(`${BACKEND_URL}/api/v1/auth/register`, {
     data: TEST_USER,
   });
-  // 200 = ok, 409 = already exists (idempotent)
-  expect([200, 409]).toContain(registerResp.status());
+  // 201 = created, 409 = already exists (idempotent)
+  expect([201, 409]).toContain(registerResp.status());
 
   // Login
   const loginResp = await page.request.post(`${BACKEND_URL}/api/v1/auth/login`, {

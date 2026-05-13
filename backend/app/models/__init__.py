@@ -7,6 +7,8 @@ from app.models.commerce import Category, Product, Cart, CartItem, Order
 from app.models.restaurant import RestaurantRecommendation
 from app.models.feedback import RecommendationLog
 from app.models.runtime import DomainEvent, TaskRun
+from app.models.recommendation import RecommendationEmbedding, RecommendationEvent, RecommendationFeedLog
+from app.models.share import TravelNote, TravelNoteComment, TravelNoteInteraction
 
 __all__ = [
     "User",
@@ -24,6 +26,12 @@ __all__ = [
     "Order",
     "RestaurantRecommendation",
     "RecommendationLog",
+    "RecommendationEvent",
+    "RecommendationEmbedding",
+    "RecommendationFeedLog",
+    "TravelNote",
+    "TravelNoteInteraction",
+    "TravelNoteComment",
     "TaskRun",
     "DomainEvent",
 ]
