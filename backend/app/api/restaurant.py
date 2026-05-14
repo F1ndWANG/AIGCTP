@@ -13,6 +13,7 @@ from app.agents.restaurant_agent import recommend_restaurants, recommend_nearby
 from app.agents.domain_results import to_legacy_payload
 from app.schemas.restaurant import RestaurantRecommendationResponse, RestaurantSelectionRequest
 from app.services.recommendation import recommendation_service
+from app.services.recommendation.catalog import sync_restaurant_recommendation_items
 
 router = APIRouter(prefix="/restaurant", tags=["restaurant"])
 
@@ -50,6 +51,7 @@ async def save_restaurant_recommendation(
     )
     db.add(record)
     await db.flush()
+    await sync_restaurant_recommendation_items(db, record)
     return record
 
 

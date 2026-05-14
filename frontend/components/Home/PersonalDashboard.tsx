@@ -50,7 +50,6 @@ export default function PersonalDashboard() {
       recommendation.getProfile().then(setRecProfile).catch(() => {}),
       recommendation.getFeed("home", 10).then((data) => {
         setRecommendations(data.items);
-        trackFeedViews(data.items);
       }).catch(() => {}),
     ]).finally(() => setLoading(false));
   }, [trackFeedViews, user]);
@@ -77,7 +76,8 @@ export default function PersonalDashboard() {
       item_type: item.item_type,
       item_id: item.item_id,
       event_type: "click",
-      context: { title: item.title },
+      impression_id: item.impression_id,
+      context: { title: item.title, rank: item.rank, algorithm: item.algorithm },
     });
     router.push(item.url || recommendationFallbackUrl(item.domain));
   };
@@ -89,7 +89,8 @@ export default function PersonalDashboard() {
       item_type: item.item_type,
       item_id: item.item_id,
       feedback: "hide",
-      context: { title: item.title },
+      impression_id: item.impression_id,
+      context: { title: item.title, rank: item.rank, algorithm: item.algorithm },
     });
   };
 
@@ -160,6 +161,7 @@ export default function PersonalDashboard() {
                   items={recommendations}
                   onOpen={openRecommendation}
                   onHide={hideRecommendation}
+                  onView={(visibleItems) => trackFeedViews(visibleItems, visibleItems.length)}
                 />
               </motion.div>
             )}

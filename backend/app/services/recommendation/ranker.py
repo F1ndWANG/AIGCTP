@@ -9,11 +9,14 @@ from app.services.recommendation.embeddings import build_item_text, text_similar
 from app.services.recommendation.profile import profile_query_text
 
 SCORE_WEIGHTS = {
-    "semantic_similarity": 0.35,
-    "user_affinity": 0.25,
-    "context_match": 0.15,
-    "popularity": 0.15,
-    "freshness": 0.10,
+    "semantic_score": 0.24,
+    "user_affinity": 0.19,
+    "context_match": 0.14,
+    "collaborative_score": 0.16,
+    "popularity": 0.09,
+    "freshness": 0.07,
+    "business_constraint_score": 0.06,
+    "feature_quality_score": 0.05,
 }
 
 
@@ -29,6 +32,11 @@ def _parse_datetime(value: Any) -> datetime | None:
 
 
 def _freshness(metadata: dict[str, Any]) -> float:
+    if metadata.get("freshness_score") is not None:
+        try:
+            return max(0.0, min(float(metadata["freshness_score"]), 1.0))
+        except (TypeError, ValueError):
+            pass
     created_at = _parse_datetime(metadata.get("created_at"))
     if not created_at:
         return 0.35
@@ -39,6 +47,11 @@ def _freshness(metadata: dict[str, Any]) -> float:
 
 
 def _popularity(metadata: dict[str, Any]) -> float:
+    if metadata.get("popularity_score") is not None:
+        try:
+            return max(0.0, min(float(metadata["popularity_score"]), 1.0))
+        except (TypeError, ValueError):
+            pass
     social = (
         float(metadata.get("like_count") or 0) * 3
         + float(metadata.get("save_count") or 0) * 4
@@ -77,21 +90,30 @@ def score_candidate(item: dict[str, Any], profile: dict[str, Any], context: dict
     semantic = text_similarity(item_text, profile_text)
     affinity = max(_event_affinity(profile, item), semantic * 0.7)
     context_match = text_similarity(item_text, _context_text(context))
+    collaborative = max(0.0, min(float(item.get("collaborative_score") or 0.0), 1.0))
     popularity = _popularity(item.get("metadata") or {})
     freshness = _freshness(item.get("metadata") or {})
+    business_constraint = max(0.0, min(float(item.get("business_constraint_score") or 0.5), 1.0))
+    feature_quality = max(0.0, min(float(item.get("feature_quality_score") or 0.0), 1.0))
     final_score = (
-        SCORE_WEIGHTS["semantic_similarity"] * semantic
+        SCORE_WEIGHTS["semantic_score"] * semantic
         + SCORE_WEIGHTS["user_affinity"] * affinity
         + SCORE_WEIGHTS["context_match"] * context_match
+        + SCORE_WEIGHTS["collaborative_score"] * collaborative
         + SCORE_WEIGHTS["popularity"] * popularity
         + SCORE_WEIGHTS["freshness"] * freshness
+        + SCORE_WEIGHTS["business_constraint_score"] * business_constraint
+        + SCORE_WEIGHTS["feature_quality_score"] * feature_quality
     )
     return {
-        "semantic_similarity": semantic,
+        "semantic_score": semantic,
         "user_affinity": affinity,
         "context_match": context_match,
+        "collaborative_score": collaborative,
         "popularity": popularity,
         "freshness": freshness,
+        "business_constraint_score": business_constraint,
+        "feature_quality_score": feature_quality,
         "final_score": final_score,
     }
 

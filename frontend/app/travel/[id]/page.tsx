@@ -5,9 +5,9 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/Layout/AuthProvider";
 import { useToast } from "@/components/UI/Toast";
 import TravelPlanCard from "@/components/TravelPlan/TravelPlanCard";
-import { travel as travelApi, chat as chatApi } from "@/lib/api";
+import { travel as travelApi, chat as chatApi, recommendation } from "@/lib/api";
 import { chatHref, setActiveSessionId } from "@/lib/session";
-import type { TravelPlanResponse } from "@/lib/types";
+import type { RecommendationFeedItem, TravelPlanResponse } from "@/lib/types";
 
 export default function TravelDetailPage() {
   const params = useParams();
@@ -23,6 +23,7 @@ export default function TravelDetailPage() {
   const [adjustInput, setAdjustInput] = useState("");
   const [adjusting, setAdjusting] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [relatedItems, setRelatedItems] = useState<RecommendationFeedItem[]>([]);
 
   useEffect(() => {
     if (sessionId) setActiveSessionId(sessionId);
@@ -37,7 +38,18 @@ export default function TravelDetailPage() {
 
     travelApi
       .get(id)
-      .then(setPlan)
+      .then((data) => {
+        setPlan(data);
+        return Promise.allSettled([
+          recommendation.getFeed("restaurant", 4),
+          recommendation.getFeed("commerce", 4),
+          recommendation.getFeed("travel", 6),
+        ]);
+      })
+      .then((results) => {
+        const items = results.flatMap((result) => (result.status === "fulfilled" ? result.value.items : []));
+        setRelatedItems(items);
+      })
       .catch(() => router.push("/chat"))
       .finally(() => setLoading(false));
   }, [params.id, user, authLoading, router]);
@@ -130,6 +142,34 @@ export default function TravelDetailPage() {
           confirming={confirming}
         />
 
+        {relatedItems.length > 0 && (
+          <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 p-5">
+            <div className="mb-4">
+              <h3 className="font-semibold text-gray-800 dark:text-gray-100">行程相关推荐</h3>
+              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                根据当前行程、社区反馈和你的历史行为混合排序
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {relatedItems.slice(0, 6).map((item) => (
+                <button
+                  key={`${item.domain}:${item.item_type}:${item.item_id}`}
+                  type="button"
+                  onClick={() => router.push(item.url || "/chat")}
+                  className="rounded-lg border border-gray-200 dark:border-slate-700 p-3 text-left transition hover:border-blue-300 hover:bg-blue-50/50 dark:hover:bg-slate-700/50"
+                >
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="text-xs text-blue-600 dark:text-blue-300">{recommendationLabel(item)}</span>
+                    {item.rank && <span className="text-[11px] text-gray-400">#{item.rank}</span>}
+                  </div>
+                  <p className="line-clamp-1 text-sm font-medium text-gray-900 dark:text-gray-100">{item.title}</p>
+                  <p className="mt-1 line-clamp-2 text-xs text-gray-500 dark:text-gray-400">{item.reason}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Adjust */}
         <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 p-5">
           <div className="mb-3">
@@ -163,4 +203,11 @@ export default function TravelDetailPage() {
       </div>
     </main>
   );
+}
+
+function recommendationLabel(item: RecommendationFeedItem) {
+  if (item.domain === "commerce") return "推荐商品";
+  if (item.domain === "restaurant") return "推荐餐厅";
+  if (item.item_type === "travel_note") return "相关游记";
+  return "相似行程";
 }

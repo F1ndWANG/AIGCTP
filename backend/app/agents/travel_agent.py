@@ -26,6 +26,8 @@ from app.models.user import User
 from app.core.logging import get_logger
 from app.services.recommendation import recommendation_service
 from app.services.recommendation.candidate import restaurant_candidate
+from app.services.travel.optimizer import optimize_itinerary
+from app.services.travel.renderer import render_itinerary_summary
 
 logger = get_logger(__name__)
 
@@ -510,8 +512,6 @@ def _ensure_requested_pois(itinerary: dict, requested_pois: list[str], instructi
     if not day_by_day:
         day_by_day.append({"day": 1, "theme": "按需调整", "activities": []})
 
-    existing = {_normalize_poi_name(p) for p in _collect_activity_pois(itinerary)}
-
     day_map = {"一": 0, "二": 1, "三": 2, "四": 3, "五": 4, "1": 0, "2": 1, "3": 2, "4": 3, "5": 4}
     target_idx = 0
     for key, idx in day_map.items():
@@ -521,6 +521,7 @@ def _ensure_requested_pois(itinerary: dict, requested_pois: list[str], instructi
 
     target_day = day_by_day[target_idx]
     activities = target_day.setdefault("activities", [])
+    existing = {_normalize_poi_name(str(activity.get("poi", ""))) for activity in activities}
 
     # Infer time slots from instruction
     slots = [m for m in ("上午", "中午", "下午", "晚上") if m in instruction]
@@ -676,18 +677,32 @@ async def plan_trip(
         include_hotels=True,
     )
     pois = _filter_excluded_pois(pois, avoid_pois or [])
+    requested_pois = [p for p in _infer_requested_pois(original_message)
+                      if _normalize_poi_name(p) != _normalize_poi_name(destination)]
+    await yield_progress(reporter, "正在进行约束优化排序...")
+    optimized_itinerary = optimize_itinerary(
+        destination=destination,
+        days=days,
+        pois=pois,
+        restaurants=restaurants,
+        hotels=hotels,
+        products=products,
+        weather=weather,
+        user_preferences=user_preferences,
+        original_message=original_message,
+        requested_pois=requested_pois,
+        avoid_pois=avoid_pois or [],
+    )
 
     # Fast path: small trips use deterministic planning
     if _should_use_fast_itinerary(days, original_message):
-        itinerary = _fallback_itinerary(destination, days, pois, restaurants, hotels)
-        requested_pois = [p for p in _infer_requested_pois(original_message)
-                          if _normalize_poi_name(p) != _normalize_poi_name(destination)]
+        itinerary = optimized_itinerary
         if requested_pois:
             _ensure_requested_pois(itinerary, requested_pois, original_message)
         _dedupe_itinerary_activities(itinerary)
         _merge_weather_into_itinerary(itinerary, weather)
         _sanitize_theme(itinerary, destination)
-        summary = _fallback_summary(destination, days, itinerary, weather)
+        summary = render_itinerary_summary(destination, days, itinerary)
         if requested_pois:
             summary = f"已将 {', '.join(requested_pois)} 同步到行程卡。\n\n{summary}"
         return TravelAgentResult(response=summary, travel_plan=TravelPlanArtifact(
@@ -695,8 +710,6 @@ async def plan_trip(
         ))
 
     await yield_progress(reporter, "正在生成行程方案...")
-    requested_pois = [p for p in _infer_requested_pois(original_message)
-                      if _normalize_poi_name(p) != _normalize_poi_name(destination)]
     conv_history = _format_conversation_history(conversation_messages) if conversation_messages else ""
     prompt = build_unified_itinerary_prompt(
         destination, days, user_preferences, pois, restaurants, hotels, weather, products,
@@ -723,9 +736,19 @@ async def plan_trip(
         itinerary = None
 
     if not isinstance(itinerary, dict) or not itinerary.get("day_by_day"):
-        itinerary = _fallback_itinerary(destination, days, pois, restaurants, hotels)
+        itinerary = optimized_itinerary
         if not summary:
-            summary = _fallback_summary(destination, days, itinerary, weather)
+            summary = render_itinerary_summary(destination, days, itinerary)
+    else:
+        # V2 keeps LLM text but uses the deterministic optimizer for the
+        # structural itinerary order, budget and constraints. This prevents the
+        # card from depending solely on LLM-generated activity sequencing.
+        llm_theme = itinerary.get("theme")
+        itinerary = optimized_itinerary
+        if llm_theme and not itinerary.get("theme"):
+            itinerary["theme"] = llm_theme
+        if not summary:
+            summary = render_itinerary_summary(destination, days, itinerary)
 
     await yield_progress(reporter, "正在优化行程细节...")
     if requested_pois:
@@ -785,11 +808,31 @@ async def adjust_plan(
         {"avoid_pois": excluded_pois},
         avoid_pois=inferred_excluded,
     ).get("avoid_pois", [])
+    raw_requested_pois = _infer_requested_pois(instruction)
+    if raw_requested_pois:
+        requested_norms = {_normalize_poi_name(poi) for poi in raw_requested_pois}
+        excluded_pois = [
+            poi for poi in excluded_pois
+            if _normalize_poi_name(poi) not in requested_norms
+        ]
     requested_pois = [
-        poi for poi in _infer_requested_pois(instruction)
+        poi for poi in raw_requested_pois
         if not _matches_excluded_poi(poi, excluded_pois)
     ]
     safe_pois = _filter_excluded_pois(pois, excluded_pois)
+    optimized_itinerary = optimize_itinerary(
+        destination=destination,
+        days=days,
+        pois=safe_pois,
+        restaurants=restaurants,
+        hotels=[],
+        products=products,
+        weather=weather,
+        user_preferences={},
+        original_message=instruction,
+        requested_pois=requested_pois,
+        avoid_pois=excluded_pois,
+    )
 
     await yield_progress(reporter, "正在通过AI重新规划行程...")
     conv_history = _format_conversation_history(conversation_messages) if conversation_messages else ""
@@ -830,16 +873,20 @@ async def adjust_plan(
             prompt += "\n\n请确保输出完整的 JSON 代码块。"
 
     if not isinstance(itinerary, dict) or not itinerary.get("day_by_day"):
-        itinerary = _fallback_itinerary(destination, days, safe_pois, restaurants, [])
+        itinerary = optimized_itinerary
         itinerary["theme"] = f"{destination}调整后行程"
         if not summary:
-            summary = _fallback_summary(destination, days, itinerary, weather)
+            summary = render_itinerary_summary(destination, days, itinerary)
+    else:
+        itinerary = optimized_itinerary
+        if not summary:
+            summary = render_itinerary_summary(destination, days, itinerary)
 
     if excluded_pois and _itinerary_contains_pois(itinerary, excluded_pois):
         _strip_excluded_activities(itinerary, excluded_pois)
+    _dedupe_itinerary_activities(itinerary)
     if requested_pois:
         _ensure_requested_pois(itinerary, requested_pois, instruction)
-    _dedupe_itinerary_activities(itinerary)
     if excluded_pois:
         _fill_itinerary_activities(itinerary, safe_pois, excluded_pois)
 

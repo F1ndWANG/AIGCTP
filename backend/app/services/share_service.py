@@ -17,6 +17,7 @@ from app.schemas.share import (
     TravelNoteResponse,
     TravelNoteUpdate,
 )
+from app.services.recommendation.catalog import sync_travel_note_item
 from app.services.recommendation import recommendation_service
 
 
@@ -47,6 +48,35 @@ class ShareService:
         result = await db.execute(query)
         return [await self.serialize_note(db, note, current_user) for note in result.scalars().all()]
 
+    async def recommended_notes(
+        self,
+        db: AsyncSession,
+        *,
+        current_user: User,
+        limit: int = 12,
+    ) -> list[TravelNoteResponse]:
+        feed = await recommendation_service.recommend(
+            db,
+            user=current_user,
+            domain="travel",
+            limit=max(limit * 2, limit),
+            context={"entry": "share_recommended", "item_type": "travel_note"},
+        )
+        note_ids = [
+            int(item["item_id"])
+            for item in feed
+            if item.get("item_type") == "travel_note" and str(item.get("item_id", "")).isdigit()
+        ][:limit]
+        if not note_ids:
+            return await self.list_notes(db, current_user=current_user, limit=limit)
+        result = await db.execute(
+            select(TravelNote)
+            .where(TravelNote.id.in_(note_ids), TravelNote.visibility == "public")
+            .options(selectinload(TravelNote.author))
+        )
+        notes = {note.id: note for note in result.scalars().all()}
+        return [await self.serialize_note(db, notes[note_id], current_user) for note_id in note_ids if note_id in notes]
+
     async def create_note(
         self,
         db: AsyncSession,
@@ -72,6 +102,7 @@ class ShareService:
         db.add(note)
         await db.flush()
         await db.refresh(note, ["author"])
+        await sync_travel_note_item(db, note)
         await self._track_note_event(db, current_user.id, note, "share")
         await db.commit()
         await db.refresh(note, ["author"])
@@ -87,6 +118,7 @@ class ShareService:
         note = await self.get_visible_note(db, note_id, current_user.id)
         note.view_count = (note.view_count or 0) + 1
         await self._track_note_event(db, current_user.id, note, "view")
+        await sync_travel_note_item(db, note)
         await db.commit()
         await db.refresh(note, ["author"])
         return await self.serialize_note(db, note, current_user, include_comments=True)
@@ -112,6 +144,8 @@ class ShareService:
                 value = value[:12]
             setattr(note, key, value)
 
+        await db.flush()
+        await sync_travel_note_item(db, note)
         await db.commit()
         await db.refresh(note, ["author"])
         return await self.serialize_note(db, note, current_user, include_comments=True)
@@ -153,6 +187,7 @@ class ShareService:
             setattr(note, counter_name, max(0, (getattr(note, counter_name) or 0) + delta))
 
         await self._track_note_event(db, current_user.id, note, payload.interaction_type)
+        await sync_travel_note_item(db, note)
         await db.commit()
         await db.refresh(note, ["author"])
         return await self.serialize_note(db, note, current_user, include_comments=True)
@@ -176,6 +211,7 @@ class ShareService:
             "comment",
             extra_context={"comment": payload.content[:200]},
         )
+        await sync_travel_note_item(db, note)
         await db.commit()
         await db.refresh(note, ["author"])
         return await self.serialize_note(db, note, current_user, include_comments=True)

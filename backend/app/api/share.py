@@ -48,6 +48,15 @@ async def create_travel_note(
     return await share_service.create_note(db, current_user=current_user, payload=payload)
 
 
+@router.get("/notes/recommended", response_model=list[TravelNoteResponse])
+async def recommended_travel_notes(
+    limit: int = Query(12, ge=1, le=30),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await share_service.recommended_notes(db, current_user=current_user, limit=limit)
+
+
 @router.get("/notes/{note_id}", response_model=TravelNoteResponse)
 async def get_travel_note(
     note_id: int,

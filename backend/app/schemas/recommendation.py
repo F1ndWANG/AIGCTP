@@ -29,6 +29,7 @@ class RecommendationEventRequest(BaseModel):
     weight: float | None = None
     context: dict[str, Any] = Field(default_factory=dict)
     session_id: str | None = Field(default=None, max_length=100)
+    impression_id: str | None = Field(default=None, max_length=64)
 
     @field_validator("domain")
     @classmethod
@@ -52,6 +53,7 @@ class RecommendationFeedbackRequest(BaseModel):
     feedback: Literal["like", "dislike", "hide", "save", "select"]
     context: dict[str, Any] = Field(default_factory=dict)
     session_id: str | None = Field(default=None, max_length=100)
+    impression_id: str | None = Field(default=None, max_length=64)
 
     @field_validator("domain")
     @classmethod
@@ -73,6 +75,10 @@ class RecommendationFeedItem(BaseModel):
     score: float
     reason: str
     metadata: dict[str, Any] = Field(default_factory=dict)
+    impression_id: str | None = None
+    rank: int | None = None
+    algorithm: str | None = None
+    source_reasons: list[str] = Field(default_factory=list)
 
 
 class RecommendationFeedResponse(BaseModel):
@@ -105,3 +111,41 @@ class RefreshEmbeddingsRequest(BaseModel):
         if value is not None and value not in VALID_RECOMMENDATION_DOMAINS:
             raise ValueError("invalid recommendation domain")
         return value
+
+
+class RecommendationEventBatchRequest(BaseModel):
+    events: list[RecommendationEventRequest] = Field(min_length=1, max_length=100)
+
+
+class RecommendationCatalogRebuildRequest(BaseModel):
+    domain: str | None = None
+
+    @field_validator("domain")
+    @classmethod
+    def validate_optional_domain(cls, value: str | None) -> str | None:
+        if value is not None and value not in VALID_RECOMMENDATION_DOMAINS - {"home"}:
+            raise ValueError("invalid recommendation domain")
+        return value
+
+
+class RecommendationFeatureRefreshRequest(BaseModel):
+    domain: str | None = None
+
+    @field_validator("domain")
+    @classmethod
+    def validate_optional_domain(cls, value: str | None) -> str | None:
+        if value is not None and value not in VALID_RECOMMENDATION_DOMAINS - {"home"}:
+            raise ValueError("invalid recommendation domain")
+        return value
+
+
+class RecommendationEvaluationResponse(BaseModel):
+    algorithm: str
+    domain: str
+    impressions: int
+    events: int
+    clicks: int
+    conversions: int
+    negative_feedback: int
+    ctr: float
+    conversion_rate: float

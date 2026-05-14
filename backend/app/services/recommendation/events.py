@@ -18,10 +18,10 @@ EVENT_WEIGHTS: dict[str, float] = {
     "confirm_plan": 5.0,
     "order": 6.0,
     "like": 5.0,
-    "dislike": -5.0,
-    "hide": -4.0,
-    "share": 4.0,
-    "comment": 3.0,
+    "dislike": -6.0,
+    "hide": -5.0,
+    "share": 6.0,
+    "comment": 4.0,
 }
 
 VALID_DOMAINS = {"home", "commerce", "restaurant", "travel", "diet"}
@@ -49,6 +49,7 @@ async def record_event(
     event_type: str,
     context: dict[str, Any] | None = None,
     session_id: str | None = None,
+    impression_id: str | None = None,
     weight: float | None = None,
     commit: bool = True,
 ) -> RecommendationEvent:
@@ -66,6 +67,7 @@ async def record_event(
         weight=event_weight(event_type, weight),
         context=_json_safe(context),
         session_id=session_id,
+        impression_id=impression_id,
     )
     db.add(event)
     if commit:

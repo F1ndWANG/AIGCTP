@@ -1,6 +1,7 @@
 "use client";
 
-import { Activity, Apple, ArrowRight, HeartPulse, Map, Package, Sparkles, UtensilsCrossed, X } from "lucide-react";
+import { useEffect, useMemo, useRef } from "react";
+import { Activity, Apple, ArrowRight, HeartPulse, Map as MapIcon, Package, Sparkles, UtensilsCrossed, X } from "lucide-react";
 
 import { Badge } from "@/components/UI/badge";
 import { Card } from "@/components/UI/card";
@@ -10,11 +11,43 @@ export function RecommendationStrip({
   items,
   onOpen,
   onHide,
+  onView,
 }: {
   items: RecommendationFeedItem[];
   onOpen: (item: RecommendationFeedItem) => void;
   onHide: (item: RecommendationFeedItem) => void;
+  onView?: (items: RecommendationFeedItem[]) => void;
 }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const viewedKeysRef = useRef<Set<string>>(new Set());
+  const itemByKey = useMemo(() => {
+    return new Map(items.map((item) => [recommendationKey(item), item]));
+  }, [items]);
+
+  useEffect(() => {
+    if (!onView || !containerRef.current || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible: RecommendationFeedItem[] = [];
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          const key = (entry.target as HTMLElement).dataset.recKey;
+          if (!key || viewedKeysRef.current.has(key)) return;
+          const item = itemByKey.get(key);
+          if (!item) return;
+          viewedKeysRef.current.add(key);
+          visible.push(item);
+          observer.unobserve(entry.target);
+        });
+        if (visible.length) onView(visible);
+      },
+      { threshold: 0.6 }
+    );
+    const nodes = containerRef.current.querySelectorAll<HTMLElement>("[data-rec-key]");
+    nodes.forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
+  }, [itemByKey, onView]);
+
   return (
     <Card size="default" className="p-0 overflow-hidden">
       <div className="p-5">
@@ -26,9 +59,9 @@ export function RecommendationStrip({
             </h3>
             <p className="mt-1 text-xs text-muted-foreground">根据你的对话、选择和收藏动态排序</p>
           </div>
-          <Badge variant="secondary">Hybrid V1</Badge>
+          <Badge variant="secondary">Hybrid V2</Badge>
         </div>
-        <div className="flex gap-3 overflow-x-auto pb-1">
+        <div ref={containerRef} className="flex gap-3 overflow-x-auto pb-1">
           {items.slice(0, 10).map((item) => (
             <RecommendationCard
               key={`${item.domain}:${item.item_type}:${item.item_id}`}
@@ -104,7 +137,10 @@ function RecommendationCard({
 }) {
   const Icon = domainIcon(item.domain);
   return (
-    <div className="group relative min-w-[220px] max-w-[220px] rounded-xl border border-border bg-background p-4 transition-all hover:-translate-y-0.5 hover:border-fuchsia-200 hover:shadow-md">
+    <div
+      data-rec-key={recommendationKey(item)}
+      className="group relative min-w-[220px] max-w-[220px] rounded-xl border border-border bg-background p-4 transition-all hover:-translate-y-0.5 hover:border-fuchsia-200 hover:shadow-md"
+    >
       <button
         type="button"
         onClick={(event) => {
@@ -135,6 +171,10 @@ function RecommendationCard({
   );
 }
 
+function recommendationKey(item: Pick<RecommendationFeedItem, "domain" | "item_type" | "item_id">): string {
+  return `${item.domain}:${item.item_type}:${item.item_id}`;
+}
+
 function domainLabel(domain: RecommendationFeedItem["domain"]): string {
   const map: Record<RecommendationFeedItem["domain"], string> = {
     home: "综合",
@@ -151,7 +191,7 @@ function domainIcon(domain: RecommendationFeedItem["domain"]) {
     home: Sparkles,
     commerce: Package,
     restaurant: UtensilsCrossed,
-    travel: Map,
+    travel: MapIcon,
     diet: HeartPulse,
   };
   return map[domain] || Apple;

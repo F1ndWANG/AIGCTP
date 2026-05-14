@@ -378,7 +378,7 @@ export interface RecommendationFeedback {
   context?: Record<string, unknown>;
 }
 
-// ===== Recommendation V1 =====
+// ===== Recommendation V2 =====
 export type RecommendationDomain = "home" | "commerce" | "restaurant" | "travel" | "diet";
 
 export type RecommendationEventType =
@@ -408,6 +408,10 @@ export interface RecommendationFeedItem {
   score: number;
   reason: string;
   metadata: Record<string, unknown>;
+  impression_id?: string;
+  rank?: number;
+  algorithm?: string;
+  source_reasons: string[];
 }
 
 export interface RecommendationFeedResponse {
@@ -438,6 +442,11 @@ export interface RecommendationEventPayload {
   weight?: number;
   context?: Record<string, unknown>;
   session_id?: string;
+  impression_id?: string;
+}
+
+export interface RecommendationEventBatchPayload {
+  events: RecommendationEventPayload[];
 }
 
 export interface RecommendationFeedbackPayload {
@@ -447,6 +456,7 @@ export interface RecommendationFeedbackPayload {
   feedback: "like" | "dislike" | "hide" | "save" | "select";
   context?: Record<string, unknown>;
   session_id?: string;
+  impression_id?: string;
 }
 
 // ===== Travel Note Sharing =====

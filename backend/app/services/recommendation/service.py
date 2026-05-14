@@ -8,16 +8,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models.recommendation import RecommendationEmbedding, RecommendationFeedLog
 from app.models.user import User
-from app.services.recommendation.candidate import collect_domain_candidates
+from app.services.recommendation.catalog import rebuild_catalog
 from app.services.recommendation.embeddings import build_item_text, text_hash, token_vector
 from app.services.recommendation.events import record_event
 from app.services.recommendation.explain import explain_item
+from app.services.recommendation.features import evaluation_summary, refresh_feature_snapshots
+from app.services.recommendation.impression import record_impressions
 from app.services.recommendation.profile import build_user_profile
 from app.services.recommendation.ranker import rank_candidates
+from app.services.recommendation.retrieval import retrieve_candidates
 
 
 class RecommendationService:
-    algorithm = "hybrid_v1"
+    algorithm = "hybrid_v2"
 
     async def profile_insights(self, db: AsyncSession, *, user: User) -> dict[str, Any]:
         profile = await build_user_profile(db, user)
@@ -50,6 +53,7 @@ class RecommendationService:
         event_type: str,
         context: dict[str, Any] | None = None,
         session_id: str | None = None,
+        impression_id: str | None = None,
         weight: float | None = None,
         commit: bool = True,
     ):
@@ -62,9 +66,41 @@ class RecommendationService:
             event_type=event_type,
             context=context,
             session_id=session_id,
+            impression_id=impression_id,
             weight=weight,
             commit=commit,
         )
+
+    async def track_batch(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: int,
+        events: list[dict[str, Any]],
+        commit: bool = True,
+    ) -> list[Any]:
+        recorded = []
+        for event in events:
+            recorded.append(
+                await self.track(
+                    db,
+                    user_id=user_id,
+                    domain=event["domain"],
+                    item_type=event["item_type"],
+                    item_id=event["item_id"],
+                    event_type=event["event_type"],
+                    context=event.get("context"),
+                    session_id=event.get("session_id"),
+                    impression_id=event.get("impression_id"),
+                    weight=event.get("weight"),
+                    commit=False,
+                )
+            )
+        if commit:
+            await db.commit()
+            for event in recorded:
+                await db.refresh(event)
+        return recorded
 
     async def recommend(
         self,
@@ -78,7 +114,14 @@ class RecommendationService:
     ) -> list[dict[str, Any]]:
         limit = max(1, min(limit or settings.RECOMMENDATION_DEFAULT_LIMIT, 50))
         profile = await build_user_profile(db, user)
-        candidates = await collect_domain_candidates(db, user_id=user.id, domain=domain, limit=limit)
+        candidates = await retrieve_candidates(
+            db,
+            user_id=user.id,
+            domain=domain,
+            profile=profile,
+            context=context or {},
+            limit=limit,
+        )
         return await self.rank_candidates(
             db,
             user=user,
@@ -111,6 +154,21 @@ class RecommendationService:
             item["score"] = round(score, 4)
             item["reason"] = explain_item(item, profile)
             items.append(item)
+        if log:
+            items = await record_impressions(
+                db,
+                user_id=user.id,
+                domain=domain,
+                algorithm=self.algorithm,
+                items=items,
+                context=context or {},
+                session_id=(context or {}).get("session_id"),
+            )
+        else:
+            items = [
+                {**item, "rank": idx, "algorithm": self.algorithm}
+                for idx, item in enumerate(items, start=1)
+            ]
 
         if log:
             db.add(
@@ -126,13 +184,15 @@ class RecommendationService:
                             "score": item["score"],
                             "reason": item["reason"],
                             "sources": item.get("_scores") or {},
+                            "source_reasons": item.get("source_reasons") or [],
+                            "impression_id": item.get("impression_id"),
                         }
                         for item in items
                     ],
                 )
             )
             await db.commit()
-        return [{k: v for k, v in item.items() if k != "_scores"} for item in items]
+        return [{k: v for k, v in item.items() if k not in {"_scores", "_recall_score"}} for item in items]
 
     async def refresh_embeddings(
         self,
@@ -145,7 +205,16 @@ class RecommendationService:
         domains = [domain] if domain else ["commerce", "restaurant", "travel", "diet"]
         total = 0
         for current_domain in domains:
-            candidates = await collect_domain_candidates(db, user_id=user.id, domain=current_domain, limit=200)
+            await rebuild_catalog(db, user_id=user.id, domain=current_domain, limit=200)
+            profile = await build_user_profile(db, user)
+            candidates = await retrieve_candidates(
+                db,
+                user_id=user.id,
+                domain=current_domain,
+                profile=profile,
+                context={},
+                limit=200,
+            )
             for item in candidates:
                 if item_ids and item["item_id"] not in item_ids:
                     continue
@@ -178,3 +247,26 @@ class RecommendationService:
                 total += 1
         await db.commit()
         return total
+
+    async def rebuild_catalog(
+        self,
+        db: AsyncSession,
+        *,
+        user: User,
+        domain: str | None = None,
+    ) -> int:
+        count = await rebuild_catalog(db, user_id=user.id, domain=domain, limit=500)
+        await db.commit()
+        return count
+
+    async def refresh_features(self, db: AsyncSession, *, domain: str | None = None) -> int:
+        count = await refresh_feature_snapshots(db, domain=domain)
+        await db.commit()
+        return count
+
+    async def evaluation(self, db: AsyncSession, *, user: User, domain: str | None = None) -> dict[str, Any]:
+        return {
+            "algorithm": self.algorithm,
+            "domain": domain or "all",
+            **await evaluation_summary(db, user_id=user.id, domain=domain),
+        }

@@ -12,6 +12,7 @@ from app.models.restaurant import RestaurantRecommendation
 from app.models.travel import TravelPlan
 from app.schemas.restaurant import RestaurantRecommendationResponse
 from app.schemas.travel import ChatResponse, TravelPlanResponse
+from app.services.recommendation.catalog import sync_restaurant_recommendation_items, sync_travel_plan_item
 
 
 async def save_or_update_travel_plan(
@@ -37,6 +38,7 @@ async def save_or_update_travel_plan(
             flag_modified(existing_plan, "itinerary")
             flag_modified(existing_plan, "preferences")
             await db.flush()
+            await sync_travel_plan_item(db, existing_plan)
             await db.refresh(existing_plan)
             return TravelPlanResponse.model_validate(existing_plan), {
                 "id": existing_plan.id,
@@ -55,6 +57,7 @@ async def save_or_update_travel_plan(
     )
     db.add(new_plan)
     await db.flush()
+    await sync_travel_plan_item(db, new_plan)
     await db.refresh(new_plan)
     return TravelPlanResponse.model_validate(new_plan), {
         "id": new_plan.id,
@@ -104,5 +107,6 @@ async def save_restaurant_recommendation(
     )
     db.add(record)
     await db.flush()
+    await sync_restaurant_recommendation_items(db, record)
     await db.refresh(record)
     return RestaurantRecommendationResponse.model_validate(record)

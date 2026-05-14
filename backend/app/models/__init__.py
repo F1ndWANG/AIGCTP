@@ -7,7 +7,14 @@ from app.models.commerce import Category, Product, Cart, CartItem, Order
 from app.models.restaurant import RestaurantRecommendation
 from app.models.feedback import RecommendationLog
 from app.models.runtime import DomainEvent, TaskRun
-from app.models.recommendation import RecommendationEmbedding, RecommendationEvent, RecommendationFeedLog
+from app.models.recommendation import (
+    RecommendationEmbedding,
+    RecommendationEvent,
+    RecommendationFeatureSnapshot,
+    RecommendationFeedLog,
+    RecommendationImpression,
+    RecommendationItem,
+)
 from app.models.share import TravelNote, TravelNoteComment, TravelNoteInteraction
 
 __all__ = [
@@ -29,6 +36,9 @@ __all__ = [
     "RecommendationEvent",
     "RecommendationEmbedding",
     "RecommendationFeedLog",
+    "RecommendationItem",
+    "RecommendationImpression",
+    "RecommendationFeatureSnapshot",
     "TravelNote",
     "TravelNoteInteraction",
     "TravelNoteComment",

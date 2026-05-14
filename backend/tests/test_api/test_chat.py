@@ -120,6 +120,28 @@ class TestChat:
         assert "什刹海" in pois
         assert "南锣鼓巷" in pois
 
+    async def test_created_travel_plan_syncs_recommendation_catalog(self, client, auth_headers, session):
+        from sqlalchemy import select
+        from app.models.recommendation import RecommendationItem
+
+        created = await client.post("/api/v1/chat", headers=auth_headers, json={
+            "message": "北京一日游，想去天坛",
+            "session_id": "travel-catalog-sync-session",
+        })
+        assert created.status_code == 200
+        plan = created.json()["travel_plan"]
+
+        result = await session.execute(
+            select(RecommendationItem).where(
+                RecommendationItem.domain == "travel",
+                RecommendationItem.item_type == "travel_plan",
+                RecommendationItem.source_id == str(plan["id"]),
+            )
+        )
+        item = result.scalar_one_or_none()
+        assert item is not None
+        assert item.city == "北京"
+
     async def test_adjusting_confirmed_plan_returns_to_draft(self, client, auth_headers):
         created = await client.post("/api/v1/chat", headers=auth_headers, json={
             "message": "北京二日游",
