@@ -1,13 +1,11 @@
 """Restaurant recommendation API — standalone and saved recommendation endpoints."""
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
-from app.core.database import get_db
-from app.models.user import User
+from app.api.deps import CurrentUser, DbSession
 from app.models.restaurant import RestaurantRecommendation
 from app.agents.restaurant_agent import recommend_restaurants, recommend_nearby
 from app.agents.domain_results import to_legacy_payload
@@ -58,8 +56,8 @@ async def save_restaurant_recommendation(
 @router.post("/recommend", summary="Recommend restaurants")
 async def restaurant_recommend(
     payload: RecommendRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     """推荐指定城市的餐厅，并保存推荐列表。"""
     cuisine_text = f"{payload.cuisine}菜系" if payload.cuisine else ""
@@ -89,8 +87,8 @@ async def restaurant_recommend(
 @router.post("/nearby", summary="Recommend nearby restaurants")
 async def restaurant_nearby(
     payload: NearbyRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     """推荐当前位置附近的餐厅，并保存推荐列表。"""
     result = to_legacy_payload(await recommend_nearby(
@@ -115,9 +113,9 @@ async def restaurant_nearby(
 
 @router.get("/recommendations", response_model=list[RestaurantRecommendationResponse])
 async def list_recommendations(
+    current_user: CurrentUser,
+    db: DbSession,
     session_id: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ):
     query = select(RestaurantRecommendation).where(RestaurantRecommendation.user_id == current_user.id)
     if session_id:
@@ -130,8 +128,8 @@ async def list_recommendations(
 @router.get("/recommendations/{recommendation_id}", response_model=RestaurantRecommendationResponse)
 async def get_recommendation(
     recommendation_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(
         select(RestaurantRecommendation).where(
@@ -149,8 +147,8 @@ async def get_recommendation(
 async def select_recommendation_restaurant(
     recommendation_id: int,
     payload: RestaurantSelectionRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(
         select(RestaurantRecommendation).where(
@@ -181,8 +179,8 @@ async def select_recommendation_restaurant(
 @router.delete("/recommendations/{recommendation_id}", status_code=204)
 async def delete_recommendation(
     recommendation_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(
         select(RestaurantRecommendation).where(

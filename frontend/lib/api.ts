@@ -4,6 +4,7 @@ export { chat } from "./api-clients/chat";
 export { commerce } from "./api-clients/commerce";
 export { diet } from "./api-clients/diet";
 export { feedback } from "./api-clients/feedback";
+export { ops } from "./api-clients/ops";
 export { recommendation } from "./api-clients/recommendation";
 export { restaurant } from "./api-clients/restaurant";
 export { route, travel } from "./api-clients/travel";

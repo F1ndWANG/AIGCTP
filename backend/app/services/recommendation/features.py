@@ -11,11 +11,10 @@ from app.models.recommendation import (
     RecommendationFeatureSnapshot,
     RecommendationImpression,
 )
+from app.services.recommendation.registry import CONVERSION_EVENTS, EVENT_WEIGHTS, POSITIVE_EVENTS
 
 
-POSITIVE_EVENTS = {"click", "save", "select", "add_cart", "confirm_plan", "order", "like", "share", "comment"}
-CONVERSION_EVENTS = {"select", "add_cart", "confirm_plan", "order"}
-SOCIAL_WEIGHTS = {"like": 5, "save": 5, "comment": 4, "share": 6}
+SOCIAL_EVENTS = ("like", "save", "comment", "share")
 
 
 def item_key(domain: str, item_type: str, item_id: str | int) -> str:
@@ -152,7 +151,7 @@ async def refresh_feature_snapshots(db: AsyncSession, *, domain: str | None = No
         counts = Counter(event.event_type for event in grouped_events.get(key, []))
         clicks = sum(counts[name] for name in ("click", "view"))
         conversions = sum(counts[name] for name in CONVERSION_EVENTS)
-        social_score = sum(counts[name] * weight for name, weight in SOCIAL_WEIGHTS.items())
+        social_score = sum(counts[name] * EVENT_WEIGHTS[name] for name in SOCIAL_EVENTS)
         impressions_count = grouped_impressions.get(key, 0)
         ctr = clicks / impressions_count if impressions_count else 0.0
         conversion_rate = conversions / impressions_count if impressions_count else 0.0

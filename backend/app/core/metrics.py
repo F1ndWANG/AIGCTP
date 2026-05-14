@@ -12,6 +12,8 @@ from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTEN
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app.core.http_paths import METRICS_EXEMPT_PATHS
+
 
 # ── HTTP Metrics ──
 
@@ -76,7 +78,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         # Skip metrics endpoint itself
-        if request.url.path in ("/api/v1/metrics", "/metrics"):
+        if request.url.path in METRICS_EXEMPT_PATHS:
             return await call_next(request)
 
         path = request.url.path

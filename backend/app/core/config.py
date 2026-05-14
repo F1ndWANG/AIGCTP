@@ -1,7 +1,13 @@
-import sys
-import warnings
 from pydantic_settings import BaseSettings
 from typing import Optional
+
+from app.core.config_validation import (
+    enforce_production_settings,
+    validate_runtime_settings,
+    warn_development_settings,
+)
+
+__all__ = ["Settings", "settings", "validate_runtime_settings"]
 
 
 class Settings(BaseSettings):
@@ -49,6 +55,9 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     RECOMMENDATION_DECAY_HALF_LIFE_DAYS: int = 14
     RECOMMENDATION_DEFAULT_LIMIT: int = 12
+    RECOMMENDATION_MAX_CANDIDATES: int = 96
+    RECOMMENDATION_SCORE_WEIGHTS: str = ""
+    RECOMMENDATION_MMR_RELEVANCE: float = 0.75
 
     # Amap (高德地图)
     AMAP_API_KEY: Optional[str] = None
@@ -89,9 +98,11 @@ class Settings(BaseSettings):
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 10
     DB_POOL_TIMEOUT: int = 30
+    DB_AUTO_CREATE_TABLES: Optional[bool] = None
 
     # Testing
     TESTING: bool = False
+    DEMO_CATALOG_AUTO_SEED: Optional[bool] = None
 
     # Trusted proxies (space-separated IPs/CIDRs for X-Forwarded-For)
     TRUSTED_PROXIES: str = ""
@@ -113,56 +124,8 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# ── Production validation ──────────────────────────────────────────
-def _validate_production() -> None:
-    """Refuse to start in production mode with unsafe settings."""
-    errors = []
-
-    _DEFAULT_SECRETS = ("dev-secret-change-in-production", "your_jwt_secret_key", "")
-    if settings.JWT_SECRET in _DEFAULT_SECRETS:
-        errors.append("JWT_SECRET is set to a default/example value")
-    if len(settings.JWT_SECRET) < 32:
-        errors.append("JWT_SECRET must be at least 32 characters")
-
-    if not settings.LLM_API_KEY:
-        errors.append("LLM_API_KEY is not set")
-    elif any(p in settings.LLM_API_KEY.lower() for p in ("placeholder", "sk-your-", "replace-with")):
-        errors.append("LLM_API_KEY appears to be a placeholder value")
-
-    if not settings.AMAP_API_KEY:
-        errors.append("AMAP_API_KEY is not set")
-    elif any(p in settings.AMAP_API_KEY.lower() for p in ("your_", "placeholder")):
-        errors.append("AMAP_API_KEY appears to be a placeholder value")
-
-    if not settings.QWEATHER_API_KEY:
-        errors.append("QWEATHER_API_KEY is not set")
-    elif any(p in settings.QWEATHER_API_KEY.lower() for p in ("your_", "placeholder")):
-        errors.append("QWEATHER_API_KEY appears to be a placeholder value")
-
-    if settings.DEBUG:
-        errors.append("DEBUG must be False in production")
-
-    if not errors:
-        return
-
-    msg = "Production startup failed:\n" + "\n".join(f"  - {e}" for e in errors)
-    print(msg, file=sys.stderr)
-    sys.exit(1)
-
-
-def _warn_dev() -> None:
-    """Warn about missing or default critical env vars at startup (dev only)."""
-    issues = []
-    if not settings.LLM_API_KEY:
-        issues.append("LLM_API_KEY is not set")
-    _DEFAULT_SECRETS = ("dev-secret-change-in-production", "your_jwt_secret_key", "")
-    if settings.JWT_SECRET in _DEFAULT_SECRETS:
-        issues.append("JWT_SECRET is using default value (insecure for production)")
-    if issues:
-        warnings.warn("Startup environment issues: " + "; ".join(issues), stacklevel=2)
-
 
 if settings.is_production:
-    _validate_production()
+    enforce_production_settings(settings)
 else:
-    _warn_dev()
+    warn_development_settings(settings)

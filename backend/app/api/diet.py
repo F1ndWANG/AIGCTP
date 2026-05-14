@@ -1,12 +1,9 @@
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 
-from app.core.database import get_db
-from app.api.deps import get_current_user
-from app.models.user import User
+from app.api.deps import CurrentUser, DbSession
 from app.models.diet import HealthProfile, MealRecord, DietPlan
 from app.schemas.diet import (
     HealthProfileRequest,
@@ -26,8 +23,8 @@ router = APIRouter(prefix="/diet", tags=["diet"])
 
 @router.get("/profile", summary="Get health profile", response_model=HealthProfileResponse)
 async def get_health_profile(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(
         select(HealthProfile).where(HealthProfile.user_id == current_user.id)
@@ -41,8 +38,8 @@ async def get_health_profile(
 @router.put("/profile", summary="Update health profile", response_model=HealthProfileResponse)
 async def update_health_profile(
     payload: HealthProfileRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(
         select(HealthProfile).where(HealthProfile.user_id == current_user.id)
@@ -78,9 +75,9 @@ async def update_health_profile(
 
 @router.get("/meals", summary="List meal records", response_model=list[MealRecordResponse])
 async def list_meals(
+    current_user: CurrentUser,
+    db: DbSession,
     meal_date: date | None = None,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ):
     query = select(MealRecord).where(MealRecord.user_id == current_user.id)
     if meal_date:
@@ -94,9 +91,9 @@ async def list_meals(
 
 @router.get("/meals/summary", summary="Get meal nutrition summary", response_model=MealRecordListResponse)
 async def get_meal_summary(
+    current_user: CurrentUser,
+    db: DbSession,
     meal_date: date | None = None,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ):
     query = select(MealRecord).where(MealRecord.user_id == current_user.id)
     if meal_date:
@@ -131,8 +128,8 @@ async def get_meal_summary(
 @router.post("/meals", summary="Create meal record", response_model=MealRecordResponse, status_code=201)
 async def create_meal(
     payload: MealRecordRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     record = MealRecord(
         user_id=current_user.id,
@@ -151,8 +148,8 @@ async def create_meal(
 @router.delete("/meals/{meal_id}", summary="Delete meal record", status_code=204)
 async def delete_meal(
     meal_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(
         select(MealRecord).where(MealRecord.id == meal_id, MealRecord.user_id == current_user.id)
@@ -169,8 +166,8 @@ async def delete_meal(
 
 @router.get("/plans", summary="List diet plans", response_model=list[DietPlanListItem])
 async def list_diet_plans(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(
         select(DietPlan)
@@ -185,8 +182,8 @@ async def list_diet_plans(
 @router.get("/plans/{plan_id}", summary="Get diet plan detail", response_model=DietPlanResponse)
 async def get_diet_plan(
     plan_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(
         select(DietPlan).where(DietPlan.id == plan_id, DietPlan.user_id == current_user.id)
@@ -200,8 +197,8 @@ async def get_diet_plan(
 @router.post("/plans/{plan_id}/confirm", summary="Confirm diet plan", response_model=DietPlanResponse)
 async def confirm_diet_plan(
     plan_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(
         select(DietPlan).where(DietPlan.id == plan_id, DietPlan.user_id == current_user.id)
@@ -221,8 +218,8 @@ async def confirm_diet_plan(
 @router.delete("/plans/{plan_id}", summary="Delete diet plan", status_code=204)
 async def delete_diet_plan(
     plan_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(
         select(DietPlan).where(DietPlan.id == plan_id, DietPlan.user_id == current_user.id)

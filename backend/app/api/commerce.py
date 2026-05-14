@@ -1,15 +1,13 @@
 import json
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import String, cast, select, func, or_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
-from app.core.database import get_db
-from app.api.deps import get_current_user
-from app.models.user import User
+from app.api.deps import CurrentUser, DbSession
 from app.models.commerce import Category, Product, Cart, CartItem, Order
 from app.services.product_images import generate_product_image, has_generated_product_image
 from app.services.recommendation import recommendation_service
@@ -47,8 +45,8 @@ router = APIRouter(prefix="/commerce", tags=["commerce"])
 
 @router.get("/categories", summary="List categories", response_model=list[CategoryResponse])
 async def list_categories(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(select(Category).order_by(Category.sort_order.asc()))
     categories = result.scalars().all()
@@ -58,8 +56,8 @@ async def list_categories(
 @router.post("/categories", summary="Create category", response_model=CategoryResponse, status_code=201)
 async def create_category(
     payload: CategoryCreateRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     cat = Category(**payload.model_dump())
     db.add(cat)
@@ -73,6 +71,8 @@ async def create_category(
 
 @router.get("/products", summary="List products")
 async def list_products(
+    current_user: CurrentUser,
+    db: DbSession,
     category_id: Optional[int] = Query(None),
     keyword: Optional[str] = Query(None),
     min_price: Optional[float] = Query(None),
@@ -80,8 +80,6 @@ async def list_products(
     tags: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ):
     query = select(Product).where(Product.status == "active")
 
@@ -118,8 +116,8 @@ async def list_products(
 @router.get("/products/{product_id}", summary="Get product detail", response_model=ProductResponse)
 async def get_product(
     product_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(select(Product).where(Product.id == product_id))
     product = result.scalar_one_or_none()
@@ -131,8 +129,8 @@ async def get_product(
 @router.post("/products", summary="Create product", response_model=ProductResponse, status_code=201)
 async def create_product(
     payload: ProductRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     product = Product(**payload.model_dump())
     db.add(product)
@@ -144,8 +142,8 @@ async def create_product(
 @router.post("/products/{product_id}/image", summary="Generate product image")
 async def generate_single_product_image(
     product_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     product = await db.get(Product, product_id)
     if not product or product.status != "active":
@@ -169,8 +167,8 @@ async def generate_single_product_image(
 @router.post("/products/images/generate", summary="Generate missing product images")
 async def generate_missing_product_images(
     payload: ProductImageGenerateRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     if not payload.product_ids:
         return {"items": []}
@@ -339,8 +337,8 @@ async def _resolve_recommended_product(payload: AddRecommendedCartItemRequest, d
 
 @router.get("/cart", summary="Get cart", response_model=CartResponse)
 async def get_cart(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     cart = await _get_or_create_cart(current_user.id, db)
     return _build_cart_response(cart)
@@ -349,8 +347,8 @@ async def get_cart(
 @router.post("/cart/items", summary="Add item to cart", response_model=CartItemResponse, status_code=201)
 async def add_cart_item(
     payload: AddCartItemRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     product = await db.get(Product, payload.product_id)
     if not product or product.status != "active":
@@ -371,8 +369,8 @@ async def add_cart_item(
 @router.post("/cart/recommended-item", summary="Add recommended item to cart", response_model=CartItemResponse, status_code=201)
 async def add_recommended_cart_item(
     payload: AddRecommendedCartItemRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     product = await _resolve_recommended_product(payload, db)
     item = await _add_product_to_cart(product, payload.quantity, payload.specs, current_user.id, db)
@@ -392,8 +390,8 @@ async def add_recommended_cart_item(
 async def update_cart_item(
     item_id: int,
     payload: UpdateCartItemRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     cart = await _get_or_create_cart(current_user.id, db)
     item = next((i for i in cart.items if i.id == item_id), None)
@@ -423,8 +421,8 @@ async def update_cart_item(
 @router.delete("/cart/items/{item_id}", summary="Remove cart item", status_code=204)
 async def remove_cart_item(
     item_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(
         select(CartItem)
@@ -447,8 +445,8 @@ async def remove_cart_item(
 
 @router.delete("/cart", status_code=204)
 async def clear_cart(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(
         select(Cart)
@@ -472,8 +470,8 @@ async def clear_cart(
 @router.post("/orders", response_model=OrderResponse, status_code=201)
 async def create_order(
     payload: CreateOrderRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     cart = await _get_or_create_cart(current_user.id, db)
     if not cart.items:
@@ -533,11 +531,11 @@ async def create_order(
 
 @router.get("/orders", summary="List orders", response_model=list[OrderListItem])
 async def list_orders(
+    current_user: CurrentUser,
+    db: DbSession,
     status: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ):
     query = select(Order).where(Order.user_id == current_user.id)
     if status:
@@ -565,8 +563,8 @@ async def list_orders(
 @router.get("/orders/{order_id}", summary="Get order detail", response_model=OrderResponse)
 async def get_order(
     order_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(
         select(Order).where(Order.id == order_id, Order.user_id == current_user.id)
@@ -580,8 +578,8 @@ async def get_order(
 @router.post("/orders/{order_id}/reorder", response_model=CartResponse)
 async def reorder(
     order_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(
         select(Order).where(Order.id == order_id, Order.user_id == current_user.id)
@@ -636,8 +634,8 @@ async def reorder(
 async def update_order_status(
     order_id: int,
     payload: OrderStatusUpdate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(
         select(Order).where(Order.id == order_id, Order.user_id == current_user.id)
@@ -662,8 +660,8 @@ async def update_order_status(
 @router.post("/orders/{order_id}/cancel", summary="Cancel order", response_model=OrderResponse)
 async def cancel_order(
     order_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(
         select(Order).where(Order.id == order_id, Order.user_id == current_user.id)

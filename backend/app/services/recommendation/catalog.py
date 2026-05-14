@@ -14,9 +14,7 @@ from app.models.recommendation import RecommendationItem
 from app.models.restaurant import RestaurantRecommendation
 from app.models.share import TravelNote
 from app.models.travel import TravelPlan
-
-
-CATALOG_DOMAINS = {"commerce", "restaurant", "travel", "diet"}
+from app.services.recommendation.registry import CATALOG_DOMAIN_ORDER
 
 
 def _first_image(value: Any) -> str | None:
@@ -278,7 +276,7 @@ async def sync_restaurant_recommendation_items(db: AsyncSession, recommendation:
 async def rebuild_catalog(db: AsyncSession, *, user_id: int | None = None, domain: str | None = None, limit: int = 500) -> int:
     """Refresh the normalized item catalog from current domain tables."""
 
-    domains = [domain] if domain else ["commerce", "travel", "restaurant", "diet"]
+    domains = [domain] if domain else list(CATALOG_DOMAIN_ORDER)
     count = 0
 
     if "commerce" in domains:

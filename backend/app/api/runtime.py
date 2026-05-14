@@ -1,10 +1,7 @@
 """Runtime operations API for task visibility and retry."""
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, HTTPException, Query, status
 
-from app.api.deps import get_current_user
-from app.core.database import get_db
-from app.models.user import User
+from app.api.deps import CurrentUser, DbSession
 from app.schemas.runtime import DomainEventResponse, TaskRunResponse
 from app.schemas.travel import ChatRequest, ChatResponse
 from app.services.chat_orchestrator import handle_chat
@@ -20,10 +17,10 @@ router = APIRouter(prefix="/runtime", tags=["runtime"])
 
 @router.get("/tasks", summary="List task runs", response_model=list[TaskRunResponse])
 async def list_tasks(
+    current_user: CurrentUser,
+    db: DbSession,
     status_filter: str | None = Query(None, alias="status"),
     limit: int = Query(50, ge=1, le=200),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ):
     return await list_task_runs(
         db=db,
@@ -36,8 +33,8 @@ async def list_tasks(
 @router.get("/tasks/{task_id}", summary="Get task run detail", response_model=TaskRunResponse)
 async def get_task(
     task_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     task = await get_task_run(db=db, user_id=current_user.id, task_id=task_id)
     if not task:
@@ -47,12 +44,12 @@ async def get_task(
 
 @router.get("/events", summary="List domain events", response_model=list[DomainEventResponse])
 async def list_events(
+    current_user: CurrentUser,
+    db: DbSession,
     session_id: str | None = None,
     task_id: str | None = None,
     event_type: str | None = None,
     limit: int = Query(100, ge=1, le=500),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ):
     return await list_domain_events(
         db=db,
@@ -67,9 +64,9 @@ async def list_events(
 @router.get("/tasks/{task_id}/events", summary="Get task events", response_model=list[DomainEventResponse])
 async def list_task_events(
     task_id: str,
+    current_user: CurrentUser,
+    db: DbSession,
     limit: int = Query(100, ge=1, le=500),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ):
     task = await get_task_run(db=db, user_id=current_user.id, task_id=task_id)
     if not task:
@@ -85,8 +82,8 @@ async def list_task_events(
 @router.post("/tasks/{task_id}/retry", summary="Retry failed task", response_model=ChatResponse)
 async def retry_task(
     task_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     task = await get_task_run(db=db, user_id=current_user.id, task_id=task_id)
     if not task:

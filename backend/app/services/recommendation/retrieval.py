@@ -4,6 +4,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.recommendation import RecommendationItem
 from app.services.recommendation.catalog import item_to_candidate, load_catalog_items, rebuild_catalog
 from app.services.recommendation.embeddings import build_item_text, text_similarity
@@ -45,6 +46,11 @@ def _business_match(candidate: dict[str, Any], context: dict[str, Any] | None) -
         except (TypeError, ValueError):
             score += 0.25
     return score / checks if checks else 0.5
+
+
+def _candidate_pool_limit(request_limit: int) -> int:
+    configured = max(1, min(int(settings.RECOMMENDATION_MAX_CANDIDATES or 1), 500))
+    return max(request_limit, configured)
 
 
 def _content_recall(items: list[RecommendationItem], profile: dict[str, Any], context: dict[str, Any], limit: int) -> list[dict[str, Any]]:
@@ -149,4 +155,13 @@ async def retrieve_candidates(
             reasons.add("feature_quality")
             merged[key]["source_reasons"] = sorted(reasons)
 
-    return list(merged.values())
+    candidates = sorted(
+        merged.values(),
+        key=lambda item: (
+            float(item.get("_recall_score") or 0),
+            float((item.get("metadata") or {}).get("popularity_score") or 0),
+            float((item.get("metadata") or {}).get("freshness_score") or 0),
+        ),
+        reverse=True,
+    )
+    return candidates[: _candidate_pool_limit(limit)]

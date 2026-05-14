@@ -2,23 +2,16 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.services.recommendation.registry import (
+    CATALOG_DOMAINS,
+    FEEDBACK_EVENTS,
+    RECOMMENDATION_DOMAINS,
+    RECOMMENDATION_EVENTS,
+)
 
-VALID_RECOMMENDATION_DOMAINS = {"home", "commerce", "restaurant", "travel", "diet"}
-VALID_RECOMMENDATION_EVENTS = {
-    "view",
-    "click",
-    "chat_mention",
-    "save",
-    "select",
-    "add_cart",
-    "confirm_plan",
-    "order",
-    "like",
-    "dislike",
-    "hide",
-    "share",
-    "comment",
-}
+
+VALID_RECOMMENDATION_DOMAINS = RECOMMENDATION_DOMAINS
+VALID_RECOMMENDATION_EVENTS = RECOMMENDATION_EVENTS
 
 
 class RecommendationEventRequest(BaseModel):
@@ -60,6 +53,13 @@ class RecommendationFeedbackRequest(BaseModel):
     def validate_domain(cls, value: str) -> str:
         if value not in VALID_RECOMMENDATION_DOMAINS:
             raise ValueError("invalid recommendation domain")
+        return value
+
+    @field_validator("feedback")
+    @classmethod
+    def validate_feedback(cls, value: str) -> str:
+        if value not in FEEDBACK_EVENTS:
+            raise ValueError("invalid recommendation feedback")
         return value
 
 
@@ -123,7 +123,7 @@ class RecommendationCatalogRebuildRequest(BaseModel):
     @field_validator("domain")
     @classmethod
     def validate_optional_domain(cls, value: str | None) -> str | None:
-        if value is not None and value not in VALID_RECOMMENDATION_DOMAINS - {"home"}:
+        if value is not None and value not in CATALOG_DOMAINS:
             raise ValueError("invalid recommendation domain")
         return value
 
@@ -134,7 +134,7 @@ class RecommendationFeatureRefreshRequest(BaseModel):
     @field_validator("domain")
     @classmethod
     def validate_optional_domain(cls, value: str | None) -> str | None:
-        if value is not None and value not in VALID_RECOMMENDATION_DOMAINS - {"home"}:
+        if value is not None and value not in CATALOG_DOMAINS:
             raise ValueError("invalid recommendation domain")
         return value
 

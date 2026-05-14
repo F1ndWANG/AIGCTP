@@ -83,6 +83,21 @@ async def get_db() -> AsyncSession:
             await session.close()
 
 
+def should_auto_create_tables() -> bool:
+    """Decide whether startup should create missing tables.
+
+    Development and tests keep the convenient create_all behavior. Production
+    should run Alembic migrations explicitly, so startup does not mutate schema
+    unless DB_AUTO_CREATE_TABLES is deliberately enabled.
+    """
+    if settings.DB_AUTO_CREATE_TABLES is not None:
+        return settings.DB_AUTO_CREATE_TABLES
+    return not settings.is_production
+
+
 async def init_db():
+    if not should_auto_create_tables():
+        _db_logger.info("Skipping metadata.create_all; expecting migrations to manage schema")
+        return
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

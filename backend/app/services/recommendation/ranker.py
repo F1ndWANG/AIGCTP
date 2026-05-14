@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import json
 from datetime import datetime, timezone
 from typing import Any
 
@@ -8,7 +9,7 @@ from app.core.config import settings
 from app.services.recommendation.embeddings import build_item_text, text_similarity
 from app.services.recommendation.profile import profile_query_text
 
-SCORE_WEIGHTS = {
+DEFAULT_SCORE_WEIGHTS = {
     "semantic_score": 0.24,
     "user_affinity": 0.19,
     "context_match": 0.14,
@@ -18,6 +19,48 @@ SCORE_WEIGHTS = {
     "business_constraint_score": 0.06,
     "feature_quality_score": 0.05,
 }
+
+
+def _configured_score_weights() -> dict[str, float]:
+    """Load ranking weights from config while preserving safe defaults.
+
+    RECOMMENDATION_SCORE_WEIGHTS accepts a JSON object such as:
+    {"semantic_score":0.25,"user_affinity":0.2}
+    Missing keys keep defaults. Invalid or non-positive values are ignored.
+    """
+    weights = DEFAULT_SCORE_WEIGHTS.copy()
+    raw = (settings.RECOMMENDATION_SCORE_WEIGHTS or "").strip()
+    if not raw:
+        return weights
+    try:
+        overrides = json.loads(raw)
+    except json.JSONDecodeError:
+        return weights
+    if not isinstance(overrides, dict):
+        return weights
+
+    changed = False
+    for key, value in overrides.items():
+        if key not in weights:
+            continue
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            continue
+        if parsed >= 0:
+            weights[key] = parsed
+            changed = True
+    if not changed:
+        return weights
+
+    total = sum(weights.values())
+    if total <= 0:
+        return DEFAULT_SCORE_WEIGHTS.copy()
+    return {key: value / total for key, value in weights.items()}
+
+
+def _mmr_relevance_weight() -> float:
+    return max(0.0, min(float(settings.RECOMMENDATION_MMR_RELEVANCE), 1.0))
 
 
 def _parse_datetime(value: Any) -> datetime | None:
@@ -85,6 +128,7 @@ def _context_text(context: dict[str, Any] | None) -> str:
 
 
 def score_candidate(item: dict[str, Any], profile: dict[str, Any], context: dict[str, Any] | None = None) -> dict[str, float]:
+    score_weights = _configured_score_weights()
     item_text = build_item_text(item)
     profile_text = profile_query_text(profile, item.get("domain"), context)
     semantic = text_similarity(item_text, profile_text)
@@ -96,14 +140,14 @@ def score_candidate(item: dict[str, Any], profile: dict[str, Any], context: dict
     business_constraint = max(0.0, min(float(item.get("business_constraint_score") or 0.5), 1.0))
     feature_quality = max(0.0, min(float(item.get("feature_quality_score") or 0.0), 1.0))
     final_score = (
-        SCORE_WEIGHTS["semantic_score"] * semantic
-        + SCORE_WEIGHTS["user_affinity"] * affinity
-        + SCORE_WEIGHTS["context_match"] * context_match
-        + SCORE_WEIGHTS["collaborative_score"] * collaborative
-        + SCORE_WEIGHTS["popularity"] * popularity
-        + SCORE_WEIGHTS["freshness"] * freshness
-        + SCORE_WEIGHTS["business_constraint_score"] * business_constraint
-        + SCORE_WEIGHTS["feature_quality_score"] * feature_quality
+        score_weights["semantic_score"] * semantic
+        + score_weights["user_affinity"] * affinity
+        + score_weights["context_match"] * context_match
+        + score_weights["collaborative_score"] * collaborative
+        + score_weights["popularity"] * popularity
+        + score_weights["freshness"] * freshness
+        + score_weights["business_constraint_score"] * business_constraint
+        + score_weights["feature_quality_score"] * feature_quality
     )
     return {
         "semantic_score": semantic,
@@ -139,6 +183,8 @@ def rank_candidates(
     scored.sort(key=lambda item: item["_scores"]["final_score"], reverse=True)
     selected: list[dict[str, Any]] = []
     pool = scored[: max(limit * 4, limit)]
+    relevance_weight = _mmr_relevance_weight()
+    diversity_weight = 1.0 - relevance_weight
     while pool and len(selected) < limit:
         best_idx = 0
         best_score = -10.0
@@ -147,7 +193,7 @@ def rank_candidates(
                 (text_similarity(item["_text"], selected_item["_text"]) for selected_item in selected),
                 default=0.0,
             )
-            mmr_score = 0.75 * item["_scores"]["final_score"] - 0.25 * similarity_to_selected
+            mmr_score = relevance_weight * item["_scores"]["final_score"] - diversity_weight * similarity_to_selected
             if mmr_score > best_score:
                 best_idx = idx
                 best_score = mmr_score

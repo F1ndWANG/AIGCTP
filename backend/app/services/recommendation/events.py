@@ -6,37 +6,13 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.recommendation import RecommendationEvent
-
-
-EVENT_WEIGHTS: dict[str, float] = {
-    "view": 1.0,
-    "click": 2.0,
-    "chat_mention": 2.0,
-    "save": 3.0,
-    "select": 4.0,
-    "add_cart": 4.0,
-    "confirm_plan": 5.0,
-    "order": 6.0,
-    "like": 5.0,
-    "dislike": -6.0,
-    "hide": -5.0,
-    "share": 6.0,
-    "comment": 4.0,
-}
-
-VALID_DOMAINS = {"home", "commerce", "restaurant", "travel", "diet"}
+from app.services.recommendation.registry import EVENT_WEIGHTS, event_weight, is_valid_domain
 
 
 def _json_safe(value: dict[str, Any] | None) -> dict[str, Any]:
     if not value:
         return {}
     return json.loads(json.dumps(value, ensure_ascii=False, default=str))
-
-
-def event_weight(event_type: str, override: float | None = None) -> float:
-    if override is not None:
-        return float(override)
-    return EVENT_WEIGHTS[event_type]
 
 
 async def record_event(
@@ -53,7 +29,7 @@ async def record_event(
     weight: float | None = None,
     commit: bool = True,
 ) -> RecommendationEvent:
-    if domain not in VALID_DOMAINS:
+    if not is_valid_domain(domain):
         raise ValueError(f"Unsupported recommendation domain: {domain}")
     if event_type not in EVENT_WEIGHTS:
         raise ValueError(f"Unsupported recommendation event_type: {event_type}")

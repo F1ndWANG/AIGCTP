@@ -15,6 +15,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.core.redis import get_redis
 from app.core.config import settings
 from app.core.error_codes import ERR_RATE_LIMITED
+from app.core.http_paths import RATE_LIMIT_EXEMPT_PATHS
 
 
 _ENDPOINT_LIMITS: list[tuple[str, int]] = [
@@ -74,7 +75,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Skip rate limiting for health checks
-        if request.url.path in ("/health", "/api/v1/health/ready", "/api/v1/health/llm"):
+        if request.url.path in RATE_LIMIT_EXEMPT_PATHS:
             return await call_next(request)
 
         client_id = _get_client_ip(request)

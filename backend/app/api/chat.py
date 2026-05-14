@@ -1,10 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
-from app.core.database import get_db
-from app.models.user import User
+from app.api.deps import CurrentUser, DbSession
 from app.schemas.travel import (
     ChatRequest,
     ChatResponse,
@@ -29,8 +26,8 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 )
 async def chat(
     payload: ChatRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     if payload.background:
         return await enqueue_chat_background(payload, current_user, db)
@@ -44,8 +41,8 @@ async def chat(
 )
 async def chat_stream(
     payload: ChatRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     return StreamingResponse(
         stream_chat_events(payload, current_user, db),
@@ -59,8 +56,8 @@ async def chat_stream(
     summary="List conversation sessions",
 )
 async def list_sessions(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     return await list_conversation_sessions(current_user.id, db)
 
@@ -72,8 +69,8 @@ async def list_sessions(
 )
 async def get_session(
     session_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     session = await get_conversation_session(session_id, current_user.id, db)
     if session is None:
@@ -88,8 +85,8 @@ async def get_session(
 )
 async def delete_session(
     session_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     deleted = await delete_conversation_session(session_id, current_user.id, db)
     if not deleted:

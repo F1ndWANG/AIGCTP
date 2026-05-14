@@ -16,6 +16,7 @@ from app.services.recommendation.features import evaluation_summary, refresh_fea
 from app.services.recommendation.impression import record_impressions
 from app.services.recommendation.profile import build_user_profile
 from app.services.recommendation.ranker import rank_candidates
+from app.services.recommendation.registry import CATALOG_DOMAIN_ORDER
 from app.services.recommendation.retrieval import retrieve_candidates
 
 
@@ -113,6 +114,7 @@ class RecommendationService:
         log: bool = True,
     ) -> list[dict[str, Any]]:
         limit = max(1, min(limit or settings.RECOMMENDATION_DEFAULT_LIMIT, 50))
+        candidate_limit = max(limit, min(settings.RECOMMENDATION_MAX_CANDIDATES, 500))
         profile = await build_user_profile(db, user)
         candidates = await retrieve_candidates(
             db,
@@ -120,7 +122,7 @@ class RecommendationService:
             domain=domain,
             profile=profile,
             context=context or {},
-            limit=limit,
+            limit=candidate_limit,
         )
         return await self.rank_candidates(
             db,
@@ -202,7 +204,7 @@ class RecommendationService:
         domain: str | None = None,
         item_ids: list[str] | None = None,
     ) -> int:
-        domains = [domain] if domain else ["commerce", "restaurant", "travel", "diet"]
+        domains = [domain] if domain else list(CATALOG_DOMAIN_ORDER)
         total = 0
         for current_domain in domains:
             await rebuild_catalog(db, user_id=user.id, domain=current_domain, limit=200)

@@ -1,10 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, HTTPException
 from sqlalchemy import select, func, case
 
-from app.core.database import get_db
-from app.api.deps import get_current_user
-from app.models.user import User
+from app.api.deps import CurrentUser, DbSession
 from app.models.feedback import RecommendationLog
 from pydantic import BaseModel
 
@@ -28,8 +25,8 @@ class FeedbackStatsResponse(BaseModel):
 @router.post("", summary="Submit feedback", status_code=201)
 async def submit_feedback(
     payload: FeedbackRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     if payload.feedback not in ("like", "dislike"):
         raise HTTPException(status_code=400, detail="Feedback must be 'like' or 'dislike'")
@@ -49,8 +46,8 @@ async def submit_feedback(
 
 @router.get("/stats", summary="Get feedback statistics", response_model=list[FeedbackStatsResponse])
 async def get_feedback_stats(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(
         select(
@@ -70,8 +67,8 @@ async def get_feedback_stats(
 
 @router.get("/analytics/summary")
 async def get_analytics_summary(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     """Aggregate analytics: total interactions, counts by content_type."""
     total_result = await db.execute(

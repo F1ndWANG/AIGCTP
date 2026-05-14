@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, HTTPException, Query, status
 
-from app.api.auth import get_current_user
-from app.core.database import get_db
-from app.models.user import User
+from app.api.deps import CurrentUser, DbSession
 from app.schemas.recommendation import (
     RecommendationCatalogRebuildRequest,
     RecommendationEvaluationResponse,
@@ -27,8 +24,8 @@ router = APIRouter(prefix="/recommend", tags=["recommendation"])
 @router.post("/events", status_code=status.HTTP_201_CREATED)
 async def track_recommendation_event(
     payload: RecommendationEventRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: DbSession,
+    current_user: CurrentUser,
 ):
     event = await recommendation_service.track(
         db,
@@ -48,8 +45,8 @@ async def track_recommendation_event(
 @router.post("/events/batch", status_code=status.HTTP_201_CREATED)
 async def track_recommendation_events_batch(
     payload: RecommendationEventBatchRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: DbSession,
+    current_user: CurrentUser,
 ):
     events = await recommendation_service.track_batch(
         db,
@@ -61,10 +58,10 @@ async def track_recommendation_events_batch(
 
 @router.get("/feed", response_model=RecommendationFeedResponse)
 async def get_recommendation_feed(
+    db: DbSession,
+    current_user: CurrentUser,
     domain: str = Query("home"),
     limit: int = Query(12, ge=1, le=50),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ):
     if domain not in VALID_RECOMMENDATION_DOMAINS:
         raise HTTPException(status_code=422, detail="invalid recommendation domain")
@@ -84,8 +81,8 @@ async def get_recommendation_feed(
 
 @router.get("/profile", response_model=RecommendationProfileResponse)
 async def get_recommendation_profile(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: DbSession,
+    current_user: CurrentUser,
 ):
     return RecommendationProfileResponse(**await recommendation_service.profile_insights(db, user=current_user))
 
@@ -93,8 +90,8 @@ async def get_recommendation_profile(
 @router.post("/refresh-embeddings")
 async def refresh_recommendation_embeddings(
     payload: RefreshEmbeddingsRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: DbSession,
+    current_user: CurrentUser,
 ):
     count = await recommendation_service.refresh_embeddings(
         db,
@@ -108,8 +105,8 @@ async def refresh_recommendation_embeddings(
 @router.post("/feedback", status_code=status.HTTP_201_CREATED)
 async def recommendation_feedback(
     payload: RecommendationFeedbackRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: DbSession,
+    current_user: CurrentUser,
 ):
     event = await recommendation_service.track(
         db,
@@ -128,8 +125,8 @@ async def recommendation_feedback(
 @router.post("/catalog/rebuild")
 async def rebuild_recommendation_catalog(
     payload: RecommendationCatalogRebuildRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: DbSession,
+    current_user: CurrentUser,
 ):
     count = await recommendation_service.rebuild_catalog(db, user=current_user, domain=payload.domain)
     return {"status": "ok", "synced": count, "algorithm": recommendation_service.algorithm}
@@ -138,8 +135,8 @@ async def rebuild_recommendation_catalog(
 @router.post("/features/refresh")
 async def refresh_recommendation_features(
     payload: RecommendationFeatureRefreshRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: DbSession,
+    current_user: CurrentUser,
 ):
     count = await recommendation_service.refresh_features(db, domain=payload.domain)
     return {"status": "ok", "snapshots": count, "algorithm": recommendation_service.algorithm}
@@ -147,9 +144,9 @@ async def refresh_recommendation_features(
 
 @router.get("/evaluation", response_model=RecommendationEvaluationResponse)
 async def get_recommendation_evaluation(
+    db: DbSession,
+    current_user: CurrentUser,
     domain: str | None = Query(None),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ):
     if domain is not None and domain not in VALID_RECOMMENDATION_DOMAINS - {"home"}:
         raise HTTPException(status_code=422, detail="invalid recommendation domain")

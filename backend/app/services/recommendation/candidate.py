@@ -12,6 +12,7 @@ from app.models.diet import DietPlan
 from app.models.restaurant import RestaurantRecommendation
 from app.models.share import TravelNote
 from app.models.travel import TravelPlan
+from app.services.recommendation.registry import HOME_FEED_DOMAIN_ORDER
 
 
 def _first_image(value: Any) -> str | None:
@@ -144,7 +145,7 @@ async def collect_domain_candidates(
 ) -> list[dict[str, Any]]:
     if domain == "home":
         candidates: list[dict[str, Any]] = []
-        for subdomain in ("travel", "restaurant", "commerce", "diet"):
+        for subdomain in HOME_FEED_DOMAIN_ORDER:
             candidates.extend(await collect_domain_candidates(db, user_id=user_id, domain=subdomain, limit=max(4, limit // 2)))
         return candidates
 

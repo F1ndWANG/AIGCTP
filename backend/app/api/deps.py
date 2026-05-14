@@ -1,17 +1,17 @@
 import logging
+from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.auth_context import ACCESS_COOKIE, access_token_candidates
 from app.core.database import get_db
 from app.core.security import decode_access_token, extract_jti, check_token_blacklisted
 from app.models.user import User
 
 bearer_scheme = HTTPBearer(auto_error=False)
 logger = logging.getLogger("app.api.deps")
-
-ACCESS_COOKIE = "access_token"
 
 
 async def get_current_user(
@@ -27,14 +27,7 @@ async def get_current_user(
     cookie_token = request.cookies.get(ACCESS_COOKIE)
     header_token = credentials.credentials if credentials else None
 
-    # Collect candidate tokens (cookie first)
-    candidates = []
-    if cookie_token:
-        candidates.append(cookie_token)
-    if header_token and header_token != cookie_token:
-        candidates.append(header_token)
-
-    for token in candidates:
+    for token in access_token_candidates(cookie_token, header_token):
         if not token:
             continue
         jti = extract_jti(token)
@@ -54,3 +47,8 @@ async def get_current_user(
             return user
 
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
+
+DbSession = Annotated[AsyncSession, Depends(get_db)]
+CurrentUser = Annotated[User, Depends(get_current_user)]
+BearerCredentials = Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)]

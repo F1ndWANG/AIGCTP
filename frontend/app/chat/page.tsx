@@ -12,7 +12,7 @@ import SuggestionChips from "@/components/Chat/SuggestionChips";
 import ChatResultCards from "@/components/Chat/ChatResultCards";
 import HistoryPanels from "@/components/Chat/HistoryPanels";
 import ChatSearch from "@/components/Chat/ChatSearch";
-import { ApiError, chat as chatApi, commerce as commerceApi, travel as travelApi } from "@/lib/api";
+import { ApiError, chat as chatApi, commerce as commerceApi, ops, travel as travelApi } from "@/lib/api";
 import { setActiveSessionId } from "@/lib/session";
 import type {
   Message,
@@ -60,8 +60,7 @@ function ChatPageContent() {
 
   // Check DeepSeek connectivity on mount
   useEffect(() => {
-    fetch("/api/health/llm", { signal: AbortSignal.timeout(8000) })
-      .then((r) => r.json())
+    ops.llmHealth()
       .then((d) => setLlmStatus(d.status === "ok" ? "ok" : "error"))
       .catch(() => setLlmStatus("error"));
   }, []);

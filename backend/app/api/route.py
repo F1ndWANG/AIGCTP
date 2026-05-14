@@ -2,12 +2,11 @@
 
 from math import sin, cos, sqrt, fabs, pi
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
-from app.api.deps import get_current_user
-from app.models.user import User
+from app.api.deps import CurrentUser
 from app.services.amap import amap_service
 
 router = APIRouter(prefix="/route", tags=["route"])
@@ -143,7 +142,7 @@ def _build_maps_url(
 @router.post("", summary="Plan route", description="Get directions between origin and destination using Amap. Supports transit/driving/walking modes.", response_model=RouteResponse)
 async def plan_route(
     payload: RouteRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: CurrentUser,
 ):
     """Get route directions from origin to destination."""
 
