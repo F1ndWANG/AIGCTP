@@ -140,14 +140,14 @@ async def search_restaurants(
     limit: int = 10,
 ) -> list[dict]:
     """搜索餐厅（带 Redis 缓存）"""
-    keywords = cuisine if cuisine else "美食"
+    keywords = cuisine if cuisine else ""
     cache_key = f"restaurant:search:{city}:{keywords}:{limit}"
     cached = await get_list(cache_key)
     if cached:
         return cached[:limit]
 
     try:
-        pois = await amap_service.search_restaurants(city, keywords=keywords, page_size=limit)
+        pois = await amap_service.search_restaurants(city, keywords=keywords or None, page_size=limit)
     except Exception:
         pois = demo_restaurants(city, cuisine, limit)
     if not pois:
@@ -162,6 +162,8 @@ async def search_restaurants(
             "longitude": p.get("longitude"),
             "latitude": p.get("latitude"),
             "phone": p.get("phone", ""),
+            "reason": p.get("reason", ""),
+            "recommended_dishes": p.get("recommended_dishes", []),
         }
         for p in pois
     ]

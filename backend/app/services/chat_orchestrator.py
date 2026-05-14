@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents import travel_agent
 from app.agents.result import AgentResult
 from app.agents.supervisor import run_agent, run_agent_stream
+from app.core.database import async_session
 from app.models.user import User
 from app.schemas.travel import ChatRequest, ChatResponse
 from app.services.artifact_service import (
@@ -60,17 +61,18 @@ async def _track_recommendation_safe(
     session_id: str | None = None,
 ) -> None:
     try:
-        await recommendation_service.track(
-            db,
-            user_id=user_id,
-            domain=domain,
-            item_type=item_type,
-            item_id=item_id,
-            event_type=event_type,
-            context=context or {},
-            session_id=session_id,
-            commit=False,
-        )
+        async with async_session() as event_db:
+            await recommendation_service.track(
+                event_db,
+                user_id=user_id,
+                domain=domain,
+                item_type=item_type,
+                item_id=item_id,
+                event_type=event_type,
+                context=context or {},
+                session_id=session_id,
+                commit=True,
+            )
     except Exception as exc:
         logger.debug("Recommendation event skipped: %s", exc)
 

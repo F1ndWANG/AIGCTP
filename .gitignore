@@ -58,6 +58,7 @@ frontend/playwright-report/
 
 # ── Local agent / scratch files ──
 .claude/
+.codex-runlogs/
 ProjTest/
 *.tmp
 .tmp_*

@@ -92,7 +92,11 @@ def optimize_itinerary(
     )
     restaurants = sorted(restaurants or [], key=lambda item: score_restaurant(item, constraints), reverse=True)
     hotels = sorted(hotels or [], key=lambda item: score_hotel(item, constraints, destination), reverse=True)
-    products = sorted(products or [], key=lambda item: score_product(item, constraints, destination), reverse=True)
+    scored_products = [
+        (score_product(item, constraints, destination), item)
+        for item in (products or [])
+    ]
+    products = [item for score, item in sorted(scored_products, key=lambda pair: pair[0], reverse=True) if score >= 0]
     ordered_pois = _ordered_pois(destination, pois, constraints)
 
     slots = TIME_SLOTS.get(constraints["pace"], TIME_SLOTS["balanced"])
@@ -147,7 +151,7 @@ def optimize_itinerary(
                         "product_id": product.get("id"),
                         "product_name": product.get("name") or product.get("title") or "旅行好物",
                         "price": float(product.get("price") or 0),
-                        "reason": product.get("reason") or "根据行程场景推荐，适合出行携带。",
+                        "reason": product.get("reason") or "匹配城市步行和短途出行场景，优先选择便携、补水、收纳或防晒类用品。",
                     }
                     for product in products[:1]
                 ],

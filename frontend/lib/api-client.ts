@@ -8,15 +8,27 @@ const RETRY_BASE_DELAY = 500;
 
 let refreshPromise: Promise<boolean> | null = null;
 
+function normalizeApiMessage(message: string): string {
+  const trimmed = message.trim();
+  const commonMessages: Record<string, string> = {
+    "Internal Server Error": "后端服务暂时不可用，请稍后重试",
+    "Invalid credentials": "用户名或密码错误",
+    "Username already exists": "用户名已存在",
+    "Request failed": "请求失败，请稍后重试",
+    "Network error": "网络连接失败，请检查服务是否已启动",
+  };
+  return commonMessages[trimmed] || trimmed;
+}
+
 function formatApiDetail(detail: unknown): string {
-  if (typeof detail === "string") return detail;
+  if (typeof detail === "string") return normalizeApiMessage(detail);
   if (Array.isArray(detail)) {
     return (
       detail
         .map((item) => {
-          if (typeof item === "string") return item;
+          if (typeof item === "string") return normalizeApiMessage(item);
           if (item && typeof item === "object" && "msg" in item) {
-            return String((item as { msg: unknown }).msg);
+            return normalizeApiMessage(String((item as { msg: unknown }).msg));
           }
           return "";
         })
@@ -25,7 +37,9 @@ function formatApiDetail(detail: unknown): string {
     );
   }
   if (detail && typeof detail === "object") {
-    if ("message" in detail) return String((detail as { message: unknown }).message);
+    if ("message" in detail) {
+      return normalizeApiMessage(String((detail as { message: unknown }).message));
+    }
     if ("detail" in detail) return formatApiDetail((detail as { detail: unknown }).detail);
   }
   return "请求失败";

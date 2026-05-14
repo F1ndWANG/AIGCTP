@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
-import { ArrowRight, BookOpenText, Heart, MessageCircle, Plus, Search, Send, Share2, Star, Bookmark } from "lucide-react";
+import { ArrowRight, BookOpenText, Bookmark, Camera, Heart, MessageCircle, Plus, Search, Send, Share2, Sparkles, Star, UsersRound } from "lucide-react";
 
 import { useAuth } from "@/components/Layout/AuthProvider";
 import { useToast } from "@/components/UI/Toast";
@@ -14,6 +14,8 @@ import { Input } from "@/components/UI/input";
 import { shares, travel } from "@/lib/api";
 import type { TravelNote, TravelPlanResponse } from "@/lib/types";
 
+type FeedMode = "discover" | "recommended" | "mine";
+
 function SharesPageContent() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -23,7 +25,7 @@ function SharesPageContent() {
   const [loading, setLoading] = useState(true);
   const [destination, setDestination] = useState("");
   const [tag, setTag] = useState("");
-  const [mine, setMine] = useState(false);
+  const [feedMode, setFeedMode] = useState<FeedMode>("discover");
   const [composeOpen, setComposeOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
@@ -31,6 +33,7 @@ function SharesPageContent() {
     content: "",
     destination: "",
     tags: "",
+    images: "",
     visibility: "public" as "public" | "private",
     travel_plan_id: undefined as number | undefined,
   });
@@ -40,7 +43,7 @@ function SharesPageContent() {
   useEffect(() => {
     if (!user) return;
     loadNotes();
-  }, [user, mine]);
+  }, [user, feedMode]);
 
   useEffect(() => {
     if (!user || !planId) return;
@@ -49,6 +52,25 @@ function SharesPageContent() {
       setForm(planToNoteForm(plan));
     }).catch(() => {});
   }, [user, planId]);
+
+  const hotTags = useMemo(() => {
+    const counts = new Map<string, number>();
+    notes.forEach((note) => note.tags.forEach((item) => counts.set(item, (counts.get(item) || 0) + 1)));
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name]) => name);
+  }, [notes]);
+
+  const communityStats = useMemo(() => {
+    const destinations = new Set(notes.map((note) => note.destination).filter(Boolean));
+    const interactions = notes.reduce(
+      (sum, note) => sum + note.like_count + note.save_count + note.comment_count + note.share_count,
+      0
+    );
+    return [
+      { label: "公开笔记", value: notes.length },
+      { label: "目的地", value: destinations.size },
+      { label: "互动", value: interactions },
+    ];
+  }, [notes]);
 
   if (authLoading) {
     return (
@@ -66,12 +88,14 @@ function SharesPageContent() {
   async function loadNotes(params?: { destination?: string; tag?: string }) {
     setLoading(true);
     try {
-      const data = await shares.listNotes({
-        destination: params?.destination ?? (destination || undefined),
-        tag: params?.tag ?? (tag || undefined),
-        mine,
-        limit: 30,
-      });
+      const data = feedMode === "recommended"
+        ? await shares.recommendedNotes(30)
+        : await shares.listNotes({
+            destination: params?.destination ?? (destination || undefined),
+            tag: params?.tag ?? (tag || undefined),
+            mine: feedMode === "mine",
+            limit: 30,
+          });
       setNotes(data);
     } catch {
       toast("加载分享内容失败", "error");
@@ -92,12 +116,13 @@ function SharesPageContent() {
         content: form.content,
         destination: form.destination,
         tags: splitTags(form.tags),
+        images: splitImageUrls(form.images),
         visibility: form.visibility,
         travel_plan_id: form.travel_plan_id,
       });
       setNotes((prev) => [note, ...prev]);
       setComposeOpen(false);
-      setForm({ title: "", content: "", destination: "", tags: "", visibility: "public", travel_plan_id: undefined });
+      setForm({ title: "", content: "", destination: "", tags: "", images: "", visibility: "public", travel_plan_id: undefined });
       toast("旅行笔记已发布", "success");
     } catch {
       toast("发布失败", "error");
@@ -118,12 +143,6 @@ function SharesPageContent() {
     }
   }
 
-  const hotTags = useMemo(() => {
-    const counts = new Map<string, number>();
-    notes.forEach((note) => note.tags.forEach((item) => counts.set(item, (counts.get(item) || 0) + 1)));
-    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name]) => name);
-  }, [notes]);
-
   return (
     <motion.main initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
@@ -134,12 +153,27 @@ function SharesPageContent() {
               旅行笔记社区
             </div>
             <h1 className="mt-3 text-2xl font-bold text-foreground">分享你的旅行灵感</h1>
-            <p className="mt-1 text-sm text-muted-foreground">把已确认行程、真实体验和避坑建议沉淀下来，也会反哺你的推荐系统。</p>
+            <p className="mt-1 text-sm text-muted-foreground">阅读真实游记、发布自己的路线记录，也可以在评论里交流细节。</p>
           </div>
           <Button onClick={() => setComposeOpen((open) => !open)} className="gap-1.5">
             <Plus className="h-4 w-4" />
             写笔记
           </Button>
+        </section>
+
+        <section className="grid gap-3 sm:grid-cols-3">
+          {communityStats.map((item) => (
+            <div key={item.label} className="rounded-xl border border-border bg-card px-4 py-3">
+              <div className="text-2xl font-bold text-foreground">{item.value}</div>
+              <div className="text-xs text-muted-foreground">{item.label}</div>
+            </div>
+          ))}
+        </section>
+
+        <section className="grid gap-3 sm:grid-cols-3">
+          <ModeButton active={feedMode === "discover"} icon={<UsersRound className="h-4 w-4" />} title="旅行广场" desc="最新公开笔记" onClick={() => setFeedMode("discover")} />
+          <ModeButton active={feedMode === "recommended"} icon={<Sparkles className="h-4 w-4" />} title="为你推荐" desc="按兴趣排序" onClick={() => setFeedMode("recommended")} />
+          <ModeButton active={feedMode === "mine"} icon={<BookOpenText className="h-4 w-4" />} title="我的发布" desc="管理自己的笔记" onClick={() => setFeedMode("mine")} />
         </section>
 
         {composeOpen && (
@@ -170,6 +204,7 @@ function SharesPageContent() {
                   <option value="private">仅自己可见</option>
                 </select>
               </div>
+              <Input value={form.images} onChange={(e) => setForm({ ...form, images: e.target.value })} placeholder="图片链接，可粘贴多个 URL，用逗号分隔" />
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setComposeOpen(false)}>取消</Button>
                 <Button onClick={publishNote} disabled={submitting} className="gap-1.5">
@@ -189,9 +224,6 @@ function SharesPageContent() {
               <Button onClick={() => loadNotes()} className="gap-1.5">
                 <Search className="h-4 w-4" />
                 搜索
-              </Button>
-              <Button variant={mine ? "default" : "outline"} onClick={() => setMine((value) => !value)}>
-                我的
               </Button>
             </div>
             {hotTags.length > 0 && (
@@ -239,6 +271,37 @@ function SharesPageContent() {
   );
 }
 
+function ModeButton({
+  active,
+  icon,
+  title,
+  desc,
+  onClick,
+}: {
+  active: boolean;
+  icon: React.ReactNode;
+  title: string;
+  desc: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded-xl border px-4 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-sm ${
+        active
+          ? "border-fuchsia-300 bg-fuchsia-50 text-fuchsia-800 dark:border-fuchsia-800 dark:bg-fuchsia-950/30 dark:text-fuchsia-200"
+          : "border-border bg-card text-foreground"
+      }`}
+    >
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        {icon}
+        {title}
+      </div>
+      <div className="mt-1 text-xs text-muted-foreground">{desc}</div>
+    </button>
+  );
+}
+
 function NoteCard({
   note,
   index,
@@ -260,6 +323,11 @@ function NoteCard({
       className="rounded-xl border border-border bg-card p-4 transition hover:-translate-y-0.5 hover:shadow-md"
     >
       <button onClick={onOpen} className="block w-full text-left">
+        {note.images?.[0] && (
+          <div className="mb-4 aspect-[16/7] overflow-hidden rounded-lg bg-muted">
+            <img src={note.images[0]} alt={note.title} className="h-full w-full object-cover" />
+          </div>
+        )}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -279,6 +347,7 @@ function NoteCard({
         </div>
       )}
       <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1"><Camera className="h-3.5 w-3.5" />{note.images?.length || 0}</span>
         <InteractionButton active={!!note.viewer_interactions.like} icon={<Heart className="h-3.5 w-3.5" />} label={String(note.like_count)} onClick={onLike} />
         <InteractionButton active={!!note.viewer_interactions.save} icon={<Bookmark className="h-3.5 w-3.5" />} label={String(note.save_count)} onClick={onSave} />
         <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1"><MessageCircle className="h-3.5 w-3.5" />{note.comment_count}</span>
@@ -316,6 +385,14 @@ function splitTags(value: string): string[] {
   return value.split(/[,，\s]+/).map((item) => item.trim()).filter(Boolean).slice(0, 12);
 }
 
+function splitImageUrls(value: string): string[] {
+  return value
+    .split(/[,，\s]+/)
+    .map((item) => item.trim())
+    .filter((item) => /^https?:\/\//i.test(item))
+    .slice(0, 6);
+}
+
 function planToNoteForm(plan: TravelPlanResponse) {
   const itinerary = plan.itinerary;
   const days = itinerary?.day_by_day || [];
@@ -328,6 +405,7 @@ function planToNoteForm(plan: TravelPlanResponse) {
     content: route || `${plan.destination}${plan.days}天行程体验记录。`,
     destination: plan.destination,
     tags: ["行程", plan.destination, itinerary?.theme].filter(Boolean).join(","),
+    images: "",
     visibility: "public" as const,
     travel_plan_id: plan.id,
   };

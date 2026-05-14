@@ -5,7 +5,7 @@ These tests verify behaviour that relies on PostgreSQL-specific features
 SQLite-in-memory tests would miss.
 
 They are **skipped automatically** when no PostgreSQL instance is available.
-To run locally::
+To run locally, use a disposable database whose name contains ``_test``::
 
     DATABASE_URL=postgresql+asyncpg://lifeai:lifeai_dev@localhost:5432/life_recommender_test \\
     pytest tests/test_integration/ -v
@@ -13,6 +13,8 @@ To run locally::
 import asyncio
 import os
 import sys
+from urllib.parse import urlparse
+
 import pytest
 from sqlalchemy import text, select
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
@@ -34,9 +36,17 @@ PG_URL = os.environ.get("DATABASE_URL", "")
 if PG_URL and not PG_URL.startswith("postgresql"):
     PG_URL = ""  # Only run against real PostgreSQL
 
+PG_DATABASE_NAME = urlparse(PG_URL.replace("+asyncpg", "")).path.rsplit("/", 1)[-1] if PG_URL else ""
+ALLOW_NON_TEST_DB = os.environ.get("ALLOW_NON_TEST_POSTGRES_INTEGRATION") == "1"
+if PG_URL and "_test" not in PG_DATABASE_NAME and not ALLOW_NON_TEST_DB:
+    PG_URL = ""
+
 pytestmark = pytest.mark.skipif(
     not PG_URL,
-    reason="Set DATABASE_URL to a PostgreSQL connection string to run integration tests",
+    reason=(
+        "Set DATABASE_URL to a disposable PostgreSQL test database whose name contains '_test' "
+        "or set ALLOW_NON_TEST_POSTGRES_INTEGRATION=1"
+    ),
 )
 
 

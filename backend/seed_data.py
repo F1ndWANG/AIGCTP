@@ -6,7 +6,6 @@ Usage:
 Requires DB to be initialized (tables created). Safe to re-run (idempotent).
 """
 import asyncio
-from datetime import datetime, timezone
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
@@ -115,9 +114,9 @@ async def seed_database():
             db.add(demo)
             await db.commit()
             await db.refresh(demo)
-            print("✅ 演示账号已创建: demo / demo123")
+            print("[OK] Demo account created: demo / demo123")
         else:
-            print("→ 演示账号已存在，跳过")
+            print("[SKIP] Demo account already exists")
 
         # ── 2. Categories ──
         cat_map = {}
@@ -129,7 +128,7 @@ async def seed_database():
                 db.add(cat)
                 await db.flush()
                 cat_map[c["name"]] = cat.id
-                print(f"✅ 分类已创建: {c['name']}")
+                print(f"[OK] Category created: {c['name']}")
             else:
                 cat_map[c["name"]] = existing.id
 
@@ -140,7 +139,7 @@ async def seed_database():
             cat_name = product_data.pop("category")
             category_id = cat_map.get(cat_name)
             if category_id is None:
-                print(f"⚠️ 跳过商品 {product_data['name']}，分类 {cat_name} 不存在")
+                print(f"[WARN] Skip product {product_data['name']}: category {cat_name} not found")
                 continue
 
             result = await db.execute(select(Product).where(Product.name == product_data["name"]))
@@ -159,12 +158,12 @@ async def seed_database():
                 count += 1
 
         await db.commit()
-        print(f"✅ 已创建 {count} 个商品")
+        print(f"[OK] Created {count} products")
 
         # ── Summary ──
         cat_count = await db.scalar(select(func.count()).select_from(Category))
         prod_count = await db.scalar(select(func.count()).select_from(Product))
-        print(f"\n📊 数据库总览: {cat_count} 个分类, {prod_count} 个商品")
+        print(f"\n[SUMMARY] Database contains {cat_count} categories and {prod_count} products")
 
     finally:
         await db.close()

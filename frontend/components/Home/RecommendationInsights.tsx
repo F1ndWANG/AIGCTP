@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { Activity, Apple, ArrowRight, HeartPulse, Map as MapIcon, Package, Sparkles, UtensilsCrossed, X } from "lucide-react";
 
-import { Badge } from "@/components/UI/badge";
 import { Card } from "@/components/UI/card";
 import type { RecommendationFeedItem, RecommendationProfile } from "@/lib/types";
 
@@ -59,7 +58,6 @@ export function RecommendationStrip({
             </h3>
             <p className="mt-1 text-xs text-muted-foreground">根据你的对话、选择和收藏动态排序</p>
           </div>
-          <Badge variant="secondary">Hybrid V2</Badge>
         </div>
         <div ref={containerRef} className="flex gap-3 overflow-x-auto pb-1">
           {items.slice(0, 10).map((item) => (
@@ -77,7 +75,7 @@ export function RecommendationStrip({
 }
 
 export function RecommendationProfilePanel({ profile }: { profile: RecommendationProfile }) {
-  const topTerms = profile.top_terms.slice(0, 10);
+  const topTerms = profile.top_terms.filter((item) => !isInternalProfileTerm(item.term)).slice(0, 10);
   return (
     <Card size="default" className="p-0 overflow-hidden">
       <div className="p-5">
@@ -91,7 +89,6 @@ export function RecommendationProfilePanel({ profile }: { profile: Recommendatio
               已学习 {profile.event_count} 个行为信号，隐藏 {profile.negative_item_count} 个不感兴趣项
             </p>
           </div>
-          <Badge variant="outline">{profile.algorithm}</Badge>
         </div>
         {topTerms.length === 0 ? (
           <div className="rounded-lg bg-muted/60 px-3 py-3 text-sm text-muted-foreground">
@@ -113,6 +110,22 @@ export function RecommendationProfilePanel({ profile }: { profile: Recommendatio
       </div>
     </Card>
   );
+}
+
+function isInternalProfileTerm(term: string): boolean {
+  const normalized = term.toLowerCase();
+  const hidden = new Set([
+    "source",
+    "dashboard_feed",
+    "title",
+    "rank",
+    "algorithm",
+    "hybrid_v2",
+    "item_id",
+    "item_type",
+    "domain",
+  ]);
+  return hidden.has(normalized);
 }
 
 export function recommendationFallbackUrl(domain: RecommendationFeedItem["domain"]): string {

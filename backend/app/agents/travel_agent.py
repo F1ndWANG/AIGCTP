@@ -23,6 +23,7 @@ from app.agents.prompt_builder import (
 )
 from app.models.commerce import Product
 from app.models.user import User
+from app.core.database import async_session
 from app.core.logging import get_logger
 from app.services.recommendation import recommendation_service
 from app.services.recommendation.candidate import restaurant_candidate
@@ -104,26 +105,27 @@ async def _rank_external_items(
     if not user_id or not items:
         return items[:limit]
     try:
-        user = await db.get(User, user_id)
-        if not user:
-            return items[:limit]
-        candidates = []
-        for index, item in enumerate(items):
-            if domain == "restaurant":
-                candidates.append(restaurant_candidate(index, {**item, "city": item.get("city") or destination}))
-            elif domain == "commerce":
-                candidates.append(_product_item_candidate(item, index=index))
-            else:
-                candidates.append(_travel_item_candidate(item, destination=destination, item_type=item_type, index=index))
-        ranked = await recommendation_service.rank_candidates(
-            db,
-            user=user,
-            domain=domain,
-            candidates=candidates,
-            limit=limit,
-            context=context,
-            log=False,
-        )
+        async with async_session() as rank_db:
+            user = await rank_db.get(User, user_id)
+            if not user:
+                return items[:limit]
+            candidates = []
+            for index, item in enumerate(items):
+                if domain == "restaurant":
+                    candidates.append(restaurant_candidate(index, {**item, "city": item.get("city") or destination}))
+                elif domain == "commerce":
+                    candidates.append(_product_item_candidate(item, index=index))
+                else:
+                    candidates.append(_travel_item_candidate(item, destination=destination, item_type=item_type, index=index))
+            ranked = await recommendation_service.rank_candidates(
+                rank_db,
+                user=user,
+                domain=domain,
+                candidates=candidates,
+                limit=limit,
+                context=context,
+                log=False,
+            )
         raw_by_id = {candidate["item_id"]: candidate["metadata"]["raw"] for candidate in candidates}
         return [raw_by_id[item["item_id"]] for item in ranked if item["item_id"] in raw_by_id] or items[:limit]
     except Exception as e:

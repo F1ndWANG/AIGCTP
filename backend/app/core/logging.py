@@ -67,9 +67,11 @@ def setup_logging(debug: bool = False, app_env: Optional[str] = None) -> None:
     root = logging.getLogger("lifeai")
     root.setLevel(level)
     root.handlers.clear()
-    root.addFilter(RequestIdFilter())
+    request_filter = RequestIdFilter()
+    root.addFilter(request_filter)
 
     handler = logging.StreamHandler(sys.stdout)
+    handler.addFilter(request_filter)
 
     if is_json:
         formatter = JsonFormatter()

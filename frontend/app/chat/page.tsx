@@ -5,12 +5,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/Layout/AuthProvider";
 import { useToast } from "@/components/UI/Toast";
 import ThemeToggle from "@/components/UI/ThemeToggle";
-import { MessageCircle, Plus, Map, History, Search, LogOut, Package } from "lucide-react";
+import { MessageCircle, Plus, Map, History, Search, LogOut } from "lucide-react";
 import MessageList from "@/components/Chat/MessageList";
 import ChatInput from "@/components/Chat/ChatInput";
 import SuggestionChips from "@/components/Chat/SuggestionChips";
 import ChatResultCards from "@/components/Chat/ChatResultCards";
-import ProductSearchPanel from "@/components/Chat/ProductSearchPanel";
 import HistoryPanels from "@/components/Chat/HistoryPanels";
 import ChatSearch from "@/components/Chat/ChatSearch";
 import { ApiError, chat as chatApi, commerce as commerceApi, travel as travelApi } from "@/lib/api";
@@ -47,7 +46,6 @@ function ChatPageContent() {
   const [thinkingText, setThinkingText] = useState("");
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [showChatHistory, setShowChatHistory] = useState(false);
-  const [showProductSearch, setShowProductSearch] = useState(false);
   const [currentProducts, setCurrentProducts] = useState<ProductListItem[]>([]);
   const [currentRestaurantRec, setCurrentRestaurantRec] = useState<SavedRestaurantRecommendation | null>(null);
   const [currentDietPlan, setCurrentDietPlan] = useState<Record<string, unknown> | null>(null);
@@ -375,12 +373,6 @@ function ChatPageContent() {
                 <History className="h-3 w-3" /> 历史对话
               </button>
               <ChatSearch messages={messages} />
-              <button
-                onClick={() => setShowProductSearch(!showProductSearch)}
-                className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 rounded-full hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
-              >
-                <Package className="h-3 w-3" /> 搜商品
-              </button>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -413,12 +405,6 @@ function ChatPageContent() {
             className="shrink-0 inline-flex items-center gap-1 text-xs px-3 py-1.5 bg-muted text-muted-foreground rounded-full"
           >
             <History className="h-3 w-3" /> 对话
-          </button>
-          <button
-            onClick={() => setShowProductSearch(!showProductSearch)}
-            className="shrink-0 inline-flex items-center gap-1 text-xs px-3 py-1.5 bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 rounded-full"
-          >
-            <Package className="h-3 w-3" /> 商品
           </button>
         </div>
       </header>
@@ -459,11 +445,6 @@ function ChatPageContent() {
         confirmingPlan={confirmingPlan}
         onAddToCart={handleAddToCart}
       />
-
-      {/* Product Search Panel */}
-      {showProductSearch && (
-        <ProductSearchPanel onAddToCart={handleAddToCart} />
-      )}
 
       {/* Suggestion Chips */}
       <SuggestionChips

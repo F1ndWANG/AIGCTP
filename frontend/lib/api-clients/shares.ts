@@ -21,6 +21,8 @@ export const shares = {
     }
     return request<TravelNote[]>(`/shares/notes${qs.toString() ? `?${qs.toString()}` : ""}`);
   },
+  recommendedNotes: (limit = 12) =>
+    request<TravelNote[]>(`/shares/notes/recommended?limit=${limit}`),
   createNote: (data: TravelNoteCreatePayload) =>
     request<TravelNote>("/shares/notes", {
       method: "POST",

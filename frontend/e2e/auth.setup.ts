@@ -12,7 +12,7 @@ const TEST_USER = {
   display_name: "E2E Test User",
 };
 
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
+const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:9000";
 
 setup("register and login test user", async ({ page }) => {
   // Register

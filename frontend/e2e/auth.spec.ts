@@ -3,7 +3,7 @@
  */
 import { test, expect, request as playwrightRequest } from "@playwright/test";
 
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
+const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:9000";
 const PASSWORD = "E2eTest123";
 
 async function createUser(username: string, display_name: string) {

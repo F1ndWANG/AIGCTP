@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 import path from "path";
 
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
+const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:9000";
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 const BACKEND_DIR = path.resolve(__dirname, "../backend");
 const BACKEND_PYTHON =
@@ -51,7 +51,7 @@ export default defineConfig({
     ? undefined
     : [
         {
-          command: `"${BACKEND_PYTHON}" -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --env-file .env`,
+          command: `"${BACKEND_PYTHON}" -m uvicorn app.main:app --host 0.0.0.0 --port 9000 --env-file .env`,
           url: `${BACKEND_URL}/health`,
           reuseExistingServer: !process.env.CI,
           timeout: 30_000,

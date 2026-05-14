@@ -110,11 +110,12 @@ class AmapService:
         page_size: int = 20,
     ) -> list[dict]:
         """搜索餐厅"""
+        cuisine = keywords if keywords not in ("美食", "餐厅", "") else None
         if not has_real_amap_key(self.api_key):
-            return demo_restaurants(city, keywords, page_size)
+            return demo_restaurants(city, cuisine, page_size)
         types = "餐饮服务"
-        if keywords:
-            return await self.search_poi(keywords, city=city, types=types, page_size=page_size)
+        if cuisine:
+            return await self.search_poi(cuisine, city=city, types=types, page_size=page_size)
         return await self.search_poi("餐厅", city=city, types=types, page_size=page_size)
 
     async def search_scenic_spots(

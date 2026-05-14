@@ -5,6 +5,29 @@ from typing import Any
 from app.services.recommendation.embeddings import text_similarity
 from app.services.travel.constraints import normalize_name
 
+TRAVEL_PRODUCT_TERMS = (
+    "旅行",
+    "出行",
+    "便携",
+    "折叠",
+    "收纳",
+    "防晒",
+    "水杯",
+    "水壶",
+    "背包",
+    "充电",
+    "充电宝",
+    "户外",
+    "雨伞",
+    "行李",
+    "纸巾",
+    "湿巾",
+    "地图",
+    "门票",
+    "纪念",
+    "明信片",
+)
+
 
 def _text(value: dict[str, Any]) -> str:
     parts = []
@@ -49,8 +72,14 @@ def score_restaurant(restaurant: dict[str, Any], constraints: dict[str, Any]) ->
 
 
 def score_product(product: dict[str, Any], constraints: dict[str, Any], destination: str) -> float:
+    text = _text(product)
+    if not any(term in text for term in TRAVEL_PRODUCT_TERMS):
+        return -1.0
     query = " ".join([destination, "旅行 便携 出行", str(constraints.get("pace") or "")])
-    return min(0.35 + 0.45 * text_similarity(_text(product), query) + 0.2 * _rating(product), 1.0)
+    score = 0.35 + 0.45 * text_similarity(text, query) + 0.2 * _rating(product)
+    if any(term in text for term in ("旅行", "出行", "便携", "收纳", "防晒", "水杯", "背包", "户外")):
+        score += 0.25
+    return min(score, 1.0)
 
 
 def score_hotel(hotel: dict[str, Any], constraints: dict[str, Any], destination: str) -> float:
